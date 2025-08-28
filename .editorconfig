@@ -1,0 +1,60 @@
+root = true
+
+# Default settings (applies to all files unless overridden)
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Go source files
+[*.go]
+indent_style = tab
+indent_size = 4
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Markdown (Google prefers readable diffs)
+[*.md]
+max_line_length = 100
+trim_trailing_whitespace = false
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+
+# YAML files (e.g., configs, Kubernetes)
+[*.yaml]
+[*.yml]
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# JSON files (e.g., gosec.json)
+[*.json]
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Shell scripts
+[*.sh]
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# TOML (for go tools like `go.mod`)
+[*.toml]
+indent_style = space
+indent_size = 2
+
+# Makefiles (use tabs always)
+[Makefile]
+indent_style = tab
+
+# Gitignore
+[.gitignore]
+trim_trailing_whitespace = false

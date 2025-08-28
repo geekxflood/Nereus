@@ -1,0 +1,74 @@
+---
+extends: default
+
+ignore: |
+  **/node_modules
+  **/vendor
+  **/.git
+  **/__pycache__
+
+rules:
+  # Enforce proper use of braces (e.g., { key: value })
+  braces:
+    max-spaces-inside: 0
+    min-spaces-inside: 0
+    level: error
+
+  # Enforce tight bracket spacing in flow-style lists
+  brackets:
+    max-spaces-inside: 0
+    min-spaces-inside: 0
+    level: error
+
+  # Require consistent indentation (2 spaces)
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+    check-multi-line-strings: true
+    level: error
+
+  # Require explicit document start (---) for readability
+  document-start:
+    present: true
+    level: warning
+
+  # Key duplication is always an error (don't allow overrides)
+  key-duplicates:
+    level: error
+
+  # Disable line-length enforcement; readability > rigid limits
+  line-length: disable
+
+  # Disallow truthy values to prevent misinterpretation
+  truthy:
+    check-keys: true
+    level: error
+
+  # Require consistent spacing after commas (if used)
+  commas:
+    require: false
+    spaces-after: 1
+    level: warning
+
+  # Enforce comment structure (but allow flexible indentation)
+  comments:
+    level: warning
+
+  comments-indentation:
+    level: warning
+
+  # Extra blank lines allowed but capped
+  empty-lines:
+    max: 2
+    max-start: 1
+    max-end: 1
+    level: warning
+
+  # Disallow trailing spaces
+  trailing-spaces:
+    level: error
+
+  # Enforce quoted strings only when necessary
+  quoted-strings:
+    required: only-when-needed
+    level: warning
