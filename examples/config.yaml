@@ -1,139 +1,279 @@
 ---
+# Nereus SNMP Trap Listener - Comprehensive Configuration Example
+# This file demonstrates all available configuration options for the Nereus SNMPv2c trap alerting system
+
 # Application configuration
 app:
   name: "nereus-snmp-listener"
   version: "1.0.0"
-  log_level: "info"
+  log_level: "info" # Legacy support - use logging.level instead
   shutdown_timeout: "30s"
+
+# Logging configuration (using geekxflood/common/logging)
+logging:
+  level: "info" # debug, info, warn, error
+  format: "json" # json, text
+  component: "nereus" # Component name for structured logging
+  stdout: true # Output to stdout
+  file: "" # Optional: log to file
+  max_size: "100MB" # Log file rotation size
+  max_backups: 5 # Number of backup files to keep
+  max_age: "30d" # Maximum age of log files
+
+# Hot reload configuration
+reload:
+  enabled: true # Enable hot reload functionality
+  watch_config_file: true # Watch this config file for changes
+  watch_mib_directories: true # Watch MIB directories for changes
+  reload_delay: "2s" # Debounce delay for file changes
+  max_reload_attempts: 3 # Maximum retry attempts on failure
+  reload_timeout: "30s" # Timeout for reload operations
+  preserve_state: true # Preserve application state during reload
+  validate_before_reload: true # Validate configuration before applying
+
+# Metrics and monitoring (Prometheus integration)
+metrics:
+  enabled: true # Enable Prometheus metrics
+  listen_address: ":9090" # Metrics server bind address
+  metrics_path: "/metrics" # Prometheus metrics endpoint
+  health_path: "/health" # Health check endpoint
+  ready_path: "/ready" # Readiness check endpoint
+  update_interval: "30s" # System metrics update frequency
+  namespace: "nereus" # Prometheus metrics namespace
 
 # SNMP Listener configuration
 listener:
-  bind_address: "0.0.0.0:162"
-  max_packet_size: 65507
-  read_timeout: "30s"
-  workers: 4
-  buffer_size: 1000
+  bind_address: "0.0.0.0:162" # SNMP trap listener address
+  max_packet_size: 65507 # Maximum UDP packet size
+  read_timeout: "30s" # Socket read timeout
+  workers: 4 # Number of worker goroutines
+  buffer_size: 1000 # Internal packet buffer size
 
-# Storage configuration
+# Storage configuration (SQLite)
 storage:
-  type: "sqlite"
-  connection_string: "./data/nereus.db"
-  max_connections: 10
-  batch_size: 100
-  batch_timeout: "5s"
-  retention_days: 30
+  type: "sqlite" # Storage backend type
+  connection_string: "./data/nereus.db" # Database file path
+  max_connections: 10 # Connection pool size
+  retention_days: 30 # Event retention period
+  cleanup_interval: "1h" # Cleanup job interval
 
 # Event correlation and deduplication
 correlator:
-  enable_deduplication: true
-  deduplication_window: "5m"
-  enable_correlation: true
-  correlation_window: "10m"
-  max_correlation_events: 100
-  auto_acknowledge: false
-  enable_flapping: true
-  flapping_threshold: 5
-  flapping_window: "2m"
+  enabled: true # Enable correlation engine
+  deduplication_window: "5m" # Time window for deduplication
+  correlation_window: "10m" # Time window for correlation
+  max_groups: 1000 # Maximum active correlation groups
+  flapping_threshold: 5 # Events needed to detect flapping
+  flapping_window: "2m" # Time window for flapping detection
 
-# Notification configuration with Prometheus/Alertmanager integration
+# Notification configuration
 notifier:
-  enable_notifications: true
-  max_concurrent: 5
-  queue_size: 1000
-  delivery_timeout: "30s"
-  retry_attempts: 3
-  retry_delay: "5s"
+  enabled: true # Enable notification system
+  workers: 5 # Number of webhook delivery workers
+  queue_size: 1000 # Notification queue size
+  retry_attempts: 3 # Maximum retry attempts
+  retry_delay: "5s" # Delay between retries
+  timeout: "30s" # Webhook delivery timeout
 
-  # Webhook configurations
-  default_webhooks:
-    # Alertmanager webhook using Prometheus alert format
-    - name: "alertmanager"
-      url: "http://alertmanager:9093/api/v1/alerts"
-      method: "POST"
-      format: "alertmanager" # Use Prometheus alert format
-      enabled: true
-      timeout: "10s"
-      retry_count: 3
-      content_type: "application/json"
-      headers:
-        User-Agent: "nereus-snmp-listener/1.0.0"
-        X-Source: "snmp-trap"
-      filters:
-        - "severity_filter"
-        - "source_filter"
-
-  # Filter rules
-  filter_rules:
-    - name: "severity_filter"
-      description: "Filter by severity level"
-      conditions:
-        - field: "severity"
-          operator: "in"
-          values: ["critical", "major", "minor"]
-      enabled: true
-
-    - name: "source_filter"
-      description: "Filter by source network"
-      conditions:
-        - field: "source_ip"
-          operator: "matches"
-          value: "^192\\.168\\."
-      enabled: true
-
-    - name: "critical_only"
-      description: "Only critical alerts"
-      conditions:
-        - field: "severity"
-          operator: "equals"
-          value: "critical"
-      enabled: true
-
-# MIB configuration
+# MIB configuration (supports hot reload)
 mib:
-  directories:
-    - "/usr/share/snmp/mibs"
+  directories: # MIB file directories to scan
     - "./mibs"
-  files:
-    - "SNMPv2-MIB"
-    - "IF-MIB"
-    - "HOST-RESOURCES-MIB"
-  auto_load: true
-  validate: true
+    - "/usr/share/snmp/mibs"
+  file_extensions: # Supported MIB file extensions
+    - ".mib"
+    - ".txt"
+    - ".my"
+  max_file_size: "10MB" # Maximum MIB file size
+  enable_hot_reload: true # Enable MIB hot reload
+  cache_enabled: true # Enable MIB parsing cache
+  cache_expiry: "1h" # Cache expiration time
 
-# OID resolution configuration
+# OID resolver configuration
 resolver:
-  cache_enabled: true
-  cache_size: 10000
-  cache_expiry: "1h"
-  enable_partial_oid: true
-  max_search_depth: 10
+  cache_size: 10000 # OID resolution cache size
+  cache_ttl: "1h" # Cache time-to-live
+  enable_reverse_lookup: true # Enable reverse OID lookups
 
 # HTTP client configuration
 client:
-  timeout: "30s"
-  max_retries: 3
-  retry_delay: "2s"
-  max_idle_conns: 100
-  insecure_skip_verify: false
-  user_agent: "nereus-snmp-listener/1.0.0"
-
-# Rate limiting
-rate_limiting:
-  enabled: true
-  requests_per_second: 100
-  burst_size: 200
-  cleanup_interval: "1m"
+  timeout: "30s" # HTTP request timeout
+  max_idle_conns: 100 # Maximum idle connections
+  max_idle_conns_per_host: 10 # Maximum idle connections per host
+  idle_conn_timeout: "90s" # Idle connection timeout
+  tls_handshake_timeout: "10s" # TLS handshake timeout
+  expect_continue_timeout: "1s" # Expect: 100-continue timeout
 
 # Health check configuration
 health_check:
-  enabled: true
-  bind_address: "0.0.0.0:8080"
-  path: "/health"
-  timeout: "5s"
+  enabled: true # Enable health checks
+  interval: "30s" # Health check interval
+  timeout: "5s" # Health check timeout
 
-# Metrics configuration
-metrics:
-  enabled: true
-  bind_address: "0.0.0.0:9090"
-  path: "/metrics"
-  namespace: "nereus"
+# Example webhook configurations (supports hot reload)
+webhooks:
+  # Slack integration
+  - name: "slack-alerts"
+    url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+    method: "POST"
+    timeout: "30s"
+    retry_count: 3
+    retry_delay: "5s"
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "text": "SNMP Trap Alert",
+        "attachments": [
+          {
+            "color": "{{ if eq .Severity \"critical\" }}danger{{ else if eq .Severity \"warning\" }}warning{{ else }}good{{ end }}",
+            "fields": [
+              {
+                "title": "Source IP",
+                "value": "{{ .SourceIP }}",
+                "short": true
+              },
+              {
+                "title": "Community",
+                "value": "{{ .Community }}",
+                "short": true
+              },
+              {
+                "title": "Timestamp",
+                "value": "{{ .Timestamp }}",
+                "short": true
+              },
+              {
+                "title": "Trap OID",
+                "value": "{{ .TrapOID }}",
+                "short": true
+              }
+            ]
+          }
+        ]
+      }
+    filters:
+      - field: "source_ip"
+        operator: "matches"
+        value: "192\\.168\\..+"
+      - field: "community"
+        operator: "equals"
+        value: "public"
+
+  # PagerDuty integration
+  - name: "pagerduty-critical"
+    url: "https://events.pagerduty.com/v2/enqueue"
+    method: "POST"
+    timeout: "30s"
+    retry_count: 5
+    retry_delay: "10s"
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Token YOUR_PAGERDUTY_TOKEN"
+    template: |
+      {
+        "routing_key": "YOUR_ROUTING_KEY",
+        "event_action": "trigger",
+        "payload": {
+          "summary": "Critical SNMP Trap from {{ .SourceIP }}",
+          "source": "{{ .SourceIP }}",
+          "severity": "critical",
+          "component": "snmp-trap-listener",
+          "group": "network",
+          "class": "snmp",
+          "custom_details": {
+            "community": "{{ .Community }}",
+            "trap_oid": "{{ .TrapOID }}",
+            "timestamp": "{{ .Timestamp }}"
+          }
+        }
+      }
+    filters:
+      - field: "severity"
+        operator: "equals"
+        value: "critical"
+
+  # Email notifications via SendGrid
+  - name: "email-notifications"
+    url: "https://api.sendgrid.com/v3/mail/send"
+    method: "POST"
+    timeout: "30s"
+    retry_count: 2
+    retry_delay: "10s"
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer YOUR_SENDGRID_API_KEY"
+    template: |
+      {
+        "personalizations": [
+          {
+            "to": [{"email": "admin@example.com"}],
+            "subject": "SNMP Trap Alert from {{ .SourceIP }}"
+          }
+        ],
+        "from": {"email": "nereus@example.com"},
+        "content": [
+          {
+            "type": "text/html",
+            "value": "<h2>SNMP Trap Alert</h2><p><strong>Source:</strong> {{ .SourceIP }}</p><p><strong>Community:</strong> {{ .Community }}</p><p><strong>Trap OID:</strong> {{ .TrapOID }}</p><p><strong>Time:</strong> {{ .Timestamp }}</p>"
+          }
+        ]
+      }
+    filters:
+      - field: "severity"
+        operator: "in"
+        value: "critical,high"
+
+  # Generic HTTP webhook
+  - name: "generic-webhook"
+    url: "https://your-webhook-endpoint.com/snmp-traps"
+    method: "POST"
+    timeout: "15s"
+    retry_count: 3
+    retry_delay: "5s"
+    headers:
+      Content-Type: "application/json"
+      X-API-Key: "your-api-key"
+    template: |
+      {
+        "event_type": "snmp_trap",
+        "source_ip": "{{ .SourceIP }}",
+        "community": "{{ .Community }}",
+        "trap_oid": "{{ .TrapOID }}",
+        "timestamp": "{{ .Timestamp }}",
+        "severity": "{{ .Severity }}",
+        "variables": {{ .Variables | toJson }}
+      }
+
+# Configuration Usage Notes:
+#
+# 1. Hot Reload: This configuration supports hot reload. Changes to this file
+#    will be automatically detected and applied without restarting Nereus.
+#
+# 2. MIB Files: Add MIB files to the configured directories. They will be
+#    automatically loaded and can be hot-reloaded when changed.
+#
+# 3. Webhooks: Webhook configurations support templating using Go templates.
+#    Available variables include: .SourceIP, .Community, .TrapOID, .Timestamp,
+#    .Severity, .Variables
+#
+# 4. Metrics: Prometheus metrics are available at http://localhost:9090/metrics
+#    Health checks at http://localhost:9090/health
+#    Readiness checks at http://localhost:9090/ready
+#
+# 5. Logging: Structured JSON logging is enabled by default. Logs include
+#    component context and can be easily parsed by log aggregation systems.
+#
+# 6. Security: Ensure proper file permissions (600 or 640) for this configuration
+#    file, especially if it contains sensitive information like API keys.
+#
+# 7. Performance: The configuration is optimized for production use with
+#    appropriate timeouts, retry policies, and resource limits.
+#
+# 8. Monitoring: All major operations are instrumented with Prometheus metrics
+#    for comprehensive observability and alerting.
+
+# Legacy configuration support (for backward compatibility):
+# - app.log_level is supported alongside logging.level
+# - Old webhook format is automatically converted to new format
+# - Previous MIB configuration keys are still recognized
