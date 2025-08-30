@@ -13,7 +13,6 @@ import (
 	"github.com/geekxflood/common/config"
 	"github.com/geekxflood/nereus/internal/client"
 	"github.com/geekxflood/nereus/internal/storage"
-	"github.com/geekxflood/nereus/internal/types"
 )
 
 // NotifierConfig holds configuration for the notification system

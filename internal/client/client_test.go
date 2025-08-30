@@ -16,12 +16,12 @@ type mockConfigProvider struct {
 func newMockConfigProvider() *mockConfigProvider {
 	return &mockConfigProvider{
 		values: map[string]interface{}{
-			"client.timeout":               "30s",
-			"client.max_retries":           3,
-			"client.retry_delay":           "1s",
-			"client.max_idle_conns":        10,
-			"client.insecure_skip_verify":  false,
-			"client.user_agent":            "Test-Client/1.0",
+			"client.timeout":              "30s",
+			"client.max_retries":          3,
+			"client.retry_delay":          "1s",
+			"client.max_idle_conns":       10,
+			"client.insecure_skip_verify": false,
+			"client.user_agent":           "Test-Client/1.0",
 		},
 	}
 }
@@ -121,25 +121,25 @@ func (m *mockConfigProvider) Validate() error {
 
 func TestNewHTTPClient(t *testing.T) {
 	cfg := newMockConfigProvider()
-	
+
 	client, err := NewHTTPClient(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create HTTP client: %v", err)
 	}
 	defer client.Close()
-	
+
 	if client == nil {
 		t.Fatal("Client is nil")
 	}
-	
+
 	if client.config == nil {
 		t.Error("Config not set")
 	}
-	
+
 	if client.httpClient == nil {
 		t.Error("HTTP client not initialized")
 	}
-	
+
 	if client.stats == nil {
 		t.Error("Stats not initialized")
 	}
@@ -150,7 +150,7 @@ func TestNewHTTPClientNilConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for nil config, got nil")
 	}
-	
+
 	expectedMsg := "configuration provider cannot be nil"
 	if err.Error() != expectedMsg {
 		t.Errorf("Expected error message '%s', got '%s'", expectedMsg, err.Error())
@@ -159,23 +159,23 @@ func TestNewHTTPClientNilConfig(t *testing.T) {
 
 func TestDefaultClientConfig(t *testing.T) {
 	config := DefaultClientConfig()
-	
+
 	if config == nil {
 		t.Fatal("Config is nil")
 	}
-	
+
 	if config.Timeout <= 0 {
 		t.Error("Invalid timeout")
 	}
-	
+
 	if config.MaxRetries < 0 {
 		t.Error("Invalid max retries")
 	}
-	
+
 	if config.UserAgent == "" {
 		t.Error("User agent not set")
 	}
-	
+
 	if config.DefaultHeaders == nil {
 		t.Error("Default headers not initialized")
 	}
@@ -308,7 +308,7 @@ func TestSendWebhookTimeout(t *testing.T) {
 
 	cfg := newMockConfigProvider()
 	cfg.values["client.timeout"] = "100ms" // Very short timeout
-	
+
 	client, err := NewHTTPClient(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create HTTP client: %v", err)
@@ -322,12 +322,12 @@ func TestSendWebhookTimeout(t *testing.T) {
 
 	ctx := context.Background()
 	response, err := client.SendWebhook(ctx, request)
-	
+
 	// Should timeout
 	if err == nil {
 		t.Error("Expected timeout error, got nil")
 	}
-	
+
 	if response != nil && response.Success {
 		t.Error("Expected failed response due to timeout")
 	}
@@ -335,7 +335,7 @@ func TestSendWebhookTimeout(t *testing.T) {
 
 func TestSendWebhookRetry(t *testing.T) {
 	attempts := 0
-	
+
 	// Create test server that fails first few attempts
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++
@@ -351,7 +351,7 @@ func TestSendWebhookRetry(t *testing.T) {
 	cfg := newMockConfigProvider()
 	cfg.values["client.max_retries"] = 3
 	cfg.values["client.retry_delay"] = "10ms" // Short delay for testing
-	
+
 	client, err := NewHTTPClient(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create HTTP client: %v", err)

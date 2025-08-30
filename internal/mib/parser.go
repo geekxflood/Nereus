@@ -260,22 +260,22 @@ func (p *Parser) parseMIBMetadata(content string, mibInfo *MIBInfo) {
 	}
 
 	// Extract contact info
-	if match := regexp.MustCompile(`CONTACT-INFO\s+"([^"]*)"`)FindStringSubmatch(content); len(match) > 1 {
+	if match := regexp.MustCompile(`CONTACT-INFO\s+"([^"]*)"`).FindStringSubmatch(content); len(match) > 1 {
 		mibInfo.ContactInfo = match[1]
 	}
 
 	// Extract description
-	if match := regexp.MustCompile(`DESCRIPTION\s+"([^"]*)"`)FindStringSubmatch(content); len(match) > 1 {
+	if match := regexp.MustCompile(`DESCRIPTION\s+"([^"]*)"`).FindStringSubmatch(content); len(match) > 1 {
 		mibInfo.Description = match[1]
 	}
 
 	// Extract last updated
-	if match := regexp.MustCompile(`LAST-UPDATED\s+"([^"]*)"`)FindStringSubmatch(content); len(match) > 1 {
+	if match := regexp.MustCompile(`LAST-UPDATED\s+"([^"]*)"`).FindStringSubmatch(content); len(match) > 1 {
 		mibInfo.LastUpdated = match[1]
 	}
 
 	// Extract revision
-	if match := regexp.MustCompile(`REVISION\s+"([^"]*)"`)FindStringSubmatch(content); len(match) > 1 {
+	if match := regexp.MustCompile(`REVISION\s+"([^"]*)"`).FindStringSubmatch(content); len(match) > 1 {
 		mibInfo.Revision = match[1]
 	}
 }

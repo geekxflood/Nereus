@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -121,25 +120,25 @@ func (m *mockConfigProvider) Validate() error {
 
 func TestNewStorage(t *testing.T) {
 	cfg := newMockConfigProvider()
-	
+
 	storage, err := NewStorage(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
 	defer storage.Close()
-	
+
 	if storage == nil {
 		t.Fatal("Storage is nil")
 	}
-	
+
 	if storage.config == nil {
 		t.Error("Config not set")
 	}
-	
+
 	if storage.db == nil {
 		t.Error("Database not initialized")
 	}
-	
+
 	if storage.stats == nil {
 		t.Error("Stats not initialized")
 	}
@@ -150,7 +149,7 @@ func TestNewStorageNilConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for nil config, got nil")
 	}
-	
+
 	expectedMsg := "configuration provider cannot be nil"
 	if err.Error() != expectedMsg {
 		t.Errorf("Expected error message '%s', got '%s'", expectedMsg, err.Error())
@@ -159,23 +158,23 @@ func TestNewStorageNilConfig(t *testing.T) {
 
 func TestDefaultStorageConfig(t *testing.T) {
 	config := DefaultStorageConfig()
-	
+
 	if config == nil {
 		t.Fatal("Config is nil")
 	}
-	
+
 	if config.DatabaseType == "" {
 		t.Error("Database type not set")
 	}
-	
+
 	if config.ConnectionString == "" {
 		t.Error("Connection string not set")
 	}
-	
+
 	if config.MaxConnections <= 0 {
 		t.Error("Invalid max connections")
 	}
-	
+
 	if config.RetentionDays <= 0 {
 		t.Error("Invalid retention days")
 	}

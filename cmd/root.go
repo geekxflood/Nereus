@@ -3,14 +3,11 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/geekxflood/common/config"
-	"github.com/geekxflood/nereus/internal/listener"
+	"github.com/geekxflood/nereus/internal/app"
 	"github.com/spf13/cobra"
 )
 
@@ -51,64 +48,33 @@ func Execute() {
 
 func runServer(cmd *cobra.Command, args []string) error {
 	// Load configuration
-	manager, err := loadConfig()
+	configManager, err := loadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
-	defer manager.Close()
-
-	// Get configuration values
-	host, _ := manager.GetString("server.host", "0.0.0.0")
-	port, _ := manager.GetInt("server.port", 162)
-	mibPath, _ := manager.GetString("mibs.path", "/opt/mibs")
+	defer configManager.Close()
 
 	fmt.Printf("Starting nereus SNMP trap alerting system...\n")
-	fmt.Printf("Listening on %s:%d\n", host, port)
-	fmt.Printf("MIB path: %s\n", mibPath)
 
-	// Create context for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle shutdown signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		<-sigChan
-		fmt.Println("\nReceived shutdown signal, stopping server...")
-		cancel()
-	}()
-
-	// Initialize and start SNMP trap listener
-	snmpListener, err := listener.NewListener(manager)
+	// Create application
+	application, err := app.NewApplication(configManager)
 	if err != nil {
-		return fmt.Errorf("failed to create SNMP listener: %w", err)
+		return fmt.Errorf("failed to create application: %w", err)
 	}
 
-	if err := snmpListener.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start SNMP listener: %w", err)
+	// Initialize all components
+	if err := application.Initialize(); err != nil {
+		return fmt.Errorf("failed to initialize application: %w", err)
 	}
 
-	fmt.Println("SNMP trap listener started successfully")
+	fmt.Println("All components initialized successfully")
 
-	// TODO: Initialize MIB parser
-	// TODO: Initialize webhook notifiers
-	// TODO: Start event correlation engine
-
-	fmt.Println("Server started successfully. Press Ctrl+C to stop.")
-
-	// Wait for shutdown signal
-	<-ctx.Done()
-
-	// Stop SNMP listener
-	fmt.Println("Stopping SNMP listener...")
-	if err := snmpListener.Stop(); err != nil {
-		fmt.Printf("Error stopping SNMP listener: %v\n", err)
+	// Run application (blocks until shutdown)
+	if err := application.Run(); err != nil {
+		return fmt.Errorf("application error: %w", err)
 	}
 
 	fmt.Println("Server stopped.")
-
 	return nil
 }
 

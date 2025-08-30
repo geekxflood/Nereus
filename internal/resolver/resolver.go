@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/geekxflood/common/config"
-	"github.com/geekxflood/nereus/internal/loader"
 	"github.com/geekxflood/nereus/internal/mib"
 )
 
@@ -43,15 +42,15 @@ type CacheEntry struct {
 
 // ResolverStats tracks resolver statistics
 type ResolverStats struct {
-	CacheHits        int64 `json:"cache_hits"`
-	CacheMisses      int64 `json:"cache_misses"`
-	TotalLookups     int64 `json:"total_lookups"`
-	PartialMatches   int64 `json:"partial_matches"`
-	ExactMatches     int64 `json:"exact_matches"`
-	ReverseLookups   int64 `json:"reverse_lookups"`
-	CacheSize        int   `json:"cache_size"`
-	CacheEvictions   int64 `json:"cache_evictions"`
-	AverageHitRatio  float64 `json:"average_hit_ratio"`
+	CacheHits       int64   `json:"cache_hits"`
+	CacheMisses     int64   `json:"cache_misses"`
+	TotalLookups    int64   `json:"total_lookups"`
+	PartialMatches  int64   `json:"partial_matches"`
+	ExactMatches    int64   `json:"exact_matches"`
+	ReverseLookups  int64   `json:"reverse_lookups"`
+	CacheSize       int     `json:"cache_size"`
+	CacheEvictions  int64   `json:"cache_evictions"`
+	AverageHitRatio float64 `json:"average_hit_ratio"`
 }
 
 // OIDInfo represents detailed information about an OID
@@ -92,15 +91,15 @@ func NewResolver(cfg config.Provider, parser *mib.Parser) (*Resolver, error) {
 
 	// Load configuration
 	resolverConfig := DefaultResolverConfig()
-	
+
 	if cacheEnabled, err := cfg.GetBool("resolver.cache_enabled", resolverConfig.CacheEnabled); err == nil {
 		resolverConfig.CacheEnabled = cacheEnabled
 	}
-	
+
 	if cacheSize, err := cfg.GetInt("resolver.cache_size", resolverConfig.CacheSize); err == nil {
 		resolverConfig.CacheSize = cacheSize
 	}
-	
+
 	if cacheExpiry, err := cfg.GetDuration("resolver.cache_expiry", resolverConfig.CacheExpiry); err == nil {
 		resolverConfig.CacheExpiry = cacheExpiry
 	}
@@ -129,7 +128,7 @@ func (r *Resolver) ResolveOID(oid string) (*OIDInfo, error) {
 		if entry, exists := r.oidCache[oid]; exists && time.Since(entry.Timestamp) < r.config.CacheExpiry {
 			r.stats.CacheHits++
 			entry.HitCount++
-			
+
 			// Parse cached result
 			info, err := r.parseOIDInfo(entry.Value)
 			if err == nil {
@@ -173,7 +172,7 @@ func (r *Resolver) ResolveName(name string) (*OIDInfo, error) {
 		if entry, exists := r.nameCache[name]; exists && time.Since(entry.Timestamp) < r.config.CacheExpiry {
 			r.stats.CacheHits++
 			entry.HitCount++
-			
+
 			// Parse cached result
 			info, err := r.parseOIDInfo(entry.Value)
 			if err == nil {
@@ -209,24 +208,24 @@ func (r *Resolver) ResolveName(name string) (*OIDInfo, error) {
 // resolvePartialOID attempts to resolve a partial OID by finding the closest match
 func (r *Resolver) resolvePartialOID(oid string) (*OIDInfo, error) {
 	parts := strings.Split(oid, ".")
-	
+
 	// Try progressively shorter OIDs
 	for i := len(parts); i > 0; i-- {
 		partialOID := strings.Join(parts[:i], ".")
 		if node, found := r.parser.FindNode(partialOID); found && node.Name != "" {
 			info := r.nodeToOIDInfo(node)
-			
+
 			// Add remaining OID parts as suffix
 			if i < len(parts) {
 				suffix := strings.Join(parts[i:], ".")
 				info.Name = fmt.Sprintf("%s.%s", info.Name, suffix)
 				info.OID = oid // Use original OID
 			}
-			
+
 			return info, nil
 		}
 	}
-	
+
 	return nil, fmt.Errorf("no partial match found for OID %s", oid)
 }
 
@@ -234,7 +233,7 @@ func (r *Resolver) resolvePartialOID(oid string) (*OIDInfo, error) {
 func (r *Resolver) resolvePrefixName(name string) (*OIDInfo, error) {
 	// Get all MIBs and search for prefix matches
 	mibs := r.parser.GetAllMIBs()
-	
+
 	for _, mib := range mibs {
 		for objName, node := range mib.Objects {
 			if strings.HasPrefix(strings.ToLower(objName), strings.ToLower(name)) {
@@ -242,7 +241,7 @@ func (r *Resolver) resolvePrefixName(name string) (*OIDInfo, error) {
 			}
 		}
 	}
-	
+
 	return nil, fmt.Errorf("no prefix match found for name %s", name)
 }
 
@@ -289,7 +288,7 @@ func (r *Resolver) cacheResult(key string, info *OIDInfo, cache map[string]*Cach
 
 	// Serialize info to string for caching
 	value := r.serializeOIDInfo(info)
-	
+
 	cache[key] = &CacheEntry{
 		Value:     value,
 		Timestamp: time.Now(),
@@ -300,7 +299,7 @@ func (r *Resolver) cacheResult(key string, info *OIDInfo, cache map[string]*Cach
 // cleanupCache removes expired and least-used entries
 func (r *Resolver) cleanupCache(cache map[string]*CacheEntry) {
 	now := time.Now()
-	
+
 	// Remove expired entries first
 	for key, entry := range cache {
 		if now.Sub(entry.Timestamp) > r.config.CacheExpiry {
@@ -308,7 +307,7 @@ func (r *Resolver) cleanupCache(cache map[string]*CacheEntry) {
 			r.stats.CacheEvictions++
 		}
 	}
-	
+
 	// If still too full, remove least-used entries
 	if len(cache) >= r.config.CacheSize {
 		// Find entries with lowest hit count
@@ -318,7 +317,7 @@ func (r *Resolver) cleanupCache(cache map[string]*CacheEntry) {
 				minHits = entry.HitCount
 			}
 		}
-		
+
 		// Remove entries with minimum hit count
 		for key, entry := range cache {
 			if entry.HitCount == minHits && len(cache) >= r.config.CacheSize {
@@ -332,8 +331,8 @@ func (r *Resolver) cleanupCache(cache map[string]*CacheEntry) {
 // serializeOIDInfo serializes OIDInfo to a string for caching
 func (r *Resolver) serializeOIDInfo(info *OIDInfo) string {
 	// Simple serialization - in production, use JSON or similar
-	return fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s", 
-		info.OID, info.Name, info.Description, info.Syntax, 
+	return fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
+		info.OID, info.Name, info.Description, info.Syntax,
 		info.Access, info.Status, info.MIBName)
 }
 
@@ -343,7 +342,7 @@ func (r *Resolver) parseOIDInfo(value string) (*OIDInfo, error) {
 	if len(parts) < 7 {
 		return nil, fmt.Errorf("invalid cached value format")
 	}
-	
+
 	return &OIDInfo{
 		OID:         parts[0],
 		Name:        parts[1],
@@ -359,15 +358,15 @@ func (r *Resolver) parseOIDInfo(value string) (*OIDInfo, error) {
 func (r *Resolver) GetStats() *ResolverStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	stats := *r.stats
 	stats.CacheSize = len(r.oidCache) + len(r.nameCache)
-	
+
 	// Calculate hit ratio
 	if stats.TotalLookups > 0 {
 		stats.AverageHitRatio = float64(stats.CacheHits) / float64(stats.TotalLookups) * 100
 	}
-	
+
 	return &stats
 }
 
@@ -375,7 +374,7 @@ func (r *Resolver) GetStats() *ResolverStats {
 func (r *Resolver) ClearCache() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	r.oidCache = make(map[string]*CacheEntry)
 	r.nameCache = make(map[string]*CacheEntry)
 }
@@ -384,7 +383,7 @@ func (r *Resolver) ClearCache() {
 func (r *Resolver) GetCacheInfo() map[string]interface{} {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	return map[string]interface{}{
 		"oid_cache_size":  len(r.oidCache),
 		"name_cache_size": len(r.nameCache),
