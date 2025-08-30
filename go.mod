@@ -3,6 +3,7 @@ module github.com/geekxflood/nereus
 go 1.25.0
 
 require (
+	cuelang.org/go v0.14.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/geekxflood/common v1.0.0
 	github.com/mattn/go-sqlite3 v1.14.32
@@ -11,8 +12,7 @@ require (
 )
 
 require (
-	cuelabs.dev/go/oci/ociregistry v0.0.0-20250715075730-49cab49c8e9d // indirect
-	cuelang.org/go v0.14.1 // indirect
+	cuelabs.dev/go/oci/ociregistry v0.0.0-20250722084951-074d06050084 // indirect
 	github.com/cockroachdb/apd/v3 v3.2.1 // indirect
 	github.com/emicklei/proto v1.14.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -30,7 +30,7 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

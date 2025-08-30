@@ -52,7 +52,7 @@ notifier:
     - name: "alertmanager"
       url: "http://alertmanager:9093/api/v1/alerts"
       method: "POST"
-      format: "alertmanager"  # Use Prometheus alert format
+      format: "alertmanager" # Use Prometheus alert format
       enabled: true
       timeout: "10s"
       retry_count: 3
@@ -68,7 +68,7 @@ notifier:
     - name: "slack"
       url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
       method: "POST"
-      format: "custom"  # Use custom template
+      format: "custom" # Use custom template
       template: "slack_template"
       enabled: true
       timeout: "10s"
@@ -81,7 +81,7 @@ notifier:
     - name: "pagerduty"
       url: "https://events.pagerduty.com/v2/enqueue"
       method: "POST"
-      format: "prometheus"  # Use Prometheus format (will be converted to PagerDuty format)
+      format: "prometheus" # Use Prometheus format (will be converted to PagerDuty format)
       enabled: true
       timeout: "15s"
       retry_count: 3
@@ -115,45 +115,18 @@ notifier:
           value: "critical"
       enabled: true
 
-  # Custom templates for non-Prometheus webhooks
-  templates:
-    slack_template: |
-      {
-        "text": "SNMP Trap Alert",
-        "attachments": [
-          {
-            "color": "{{if eq .Severity \"critical\"}}danger{{else if eq .Severity \"major\"}}warning{{else}}good{{end}}",
-            "fields": [
-              {
-                "title": "Source",
-                "value": "{{.SourceIP}}",
-                "short": true
-              },
-              {
-                "title": "Trap OID",
-                "value": "{{.TrapOID}}",
-                "short": true
-              },
-              {
-                "title": "Severity",
-                "value": "{{.Severity}}",
-                "short": true
-              },
-              {
-                "title": "Status",
-                "value": "{{.Status}}",
-                "short": true
-              },
-              {
-                "title": "Description",
-                "value": "{{.TrapName}} - {{.Metadata}}",
-                "short": false
-              }
-            ],
-            "ts": {{.Timestamp.Unix}}
-          }
-        ]
-      }
+  # Templates are now managed by embedded CUE files
+  # Available built-in templates: default, slack, pagerduty, email
+  # Custom templates can be added by extending the CUE template files
+  #
+  # Built-in templates provide:
+  # - Type-safe template definitions with CUE validation
+  # - Consistent field mapping and formatting
+  # - Template usage examples and documentation
+  # - Automatic severity mapping and color coding
+  #
+  # To use a specific template, set the 'template' field in webhook configuration
+  # Example: template: "slack" will use the embedded Slack CUE template
 
 # MIB configuration
 mib:
@@ -204,7 +177,6 @@ metrics:
   bind_address: "0.0.0.0:9090"
   path: "/metrics"
   namespace: "nereus"
-
 # Example Alertmanager configuration (alertmanager.yml)
 # This shows how to configure Alertmanager to handle the alerts sent by Nereus
 #

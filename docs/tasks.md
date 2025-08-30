@@ -259,7 +259,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] Unit Testing Framework
 
-- [ ] Comprehensive unit test coverage (>80%)
+- [ ] Comprehensive unit test coverage (>90%)
 - [ ] Mock implementations for external dependencies
 - [ ] Test utilities and helpers
 - [ ] Automated test execution
@@ -293,7 +293,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] API Documentation
 
-- [ ] GoDoc comments for all public APIs
+- [ ] GoDoc comments for all the codebase
 - [ ] Configuration reference documentation
 - [ ] MIB integration guide
 - [ ] Webhook configuration examples

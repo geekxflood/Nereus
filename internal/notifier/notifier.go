@@ -1,118 +1,78 @@
-// Package notifier provides webhook notification management and delivery.
+// Package notifier provides simplified notification services focused on Alertmanager integration.
 package notifier
 
 import (
+	"bytes"
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
-	"strings"
+	"log/slog"
 	"sync"
 	"text/template"
 	"time"
 
+	"cuelang.org/go/cue"
+	"cuelang.org/go/cue/cuecontext"
 	"github.com/geekxflood/common/config"
 	"github.com/geekxflood/nereus/internal/alerts"
 	"github.com/geekxflood/nereus/internal/client"
 	"github.com/geekxflood/nereus/internal/storage"
 )
 
-// NotifierConfig holds configuration for the notification system
+//go:embed templates/default.cue
+var defaultTemplate embed.FS
+
+// NotifierConfig defines the configuration for the notification system
 type NotifierConfig struct {
-	EnableNotifications bool              `json:"enable_notifications"`
-	DefaultWebhooks     []WebhookConfig   `json:"default_webhooks"`
-	MaxConcurrent       int               `json:"max_concurrent"`
-	QueueSize           int               `json:"queue_size"`
-	DeliveryTimeout     time.Duration     `json:"delivery_timeout"`
-	RetryAttempts       int               `json:"retry_attempts"`
-	RetryDelay          time.Duration     `json:"retry_delay"`
-	FilterRules         []FilterRule      `json:"filter_rules"`
-	Templates           map[string]string `json:"templates"`
-	RateLimiting        RateLimitConfig   `json:"rate_limiting"`
+	EnableNotifications bool               `json:"enable_notifications"`
+	MaxConcurrent       int                `json:"max_concurrent"`
+	QueueSize           int                `json:"queue_size"`
+	DeliveryTimeout     time.Duration      `json:"delivery_timeout"`
+	RetryAttempts       int                `json:"retry_attempts"`
+	RetryDelay          time.Duration      `json:"retry_delay"`
+	DefaultWebhooks     []WebhookConfig    `json:"default_webhooks"`
+	FilterRules         []FilterRule       `json:"filter_rules"`
+	RateLimiting        RateLimitingConfig `json:"rate_limiting"`
 }
 
-// WebhookConfig represents a webhook endpoint configuration
+// WebhookConfig defines a webhook endpoint configuration
 type WebhookConfig struct {
 	Name        string            `json:"name"`
 	URL         string            `json:"url"`
 	Method      string            `json:"method"`
-	Headers     map[string]string `json:"headers"`
+	Format      string            `json:"format"` // "alertmanager", "prometheus", "custom"
 	Template    string            `json:"template"`
-	Format      string            `json:"format"` // "prometheus", "alertmanager", "custom"
 	Enabled     bool              `json:"enabled"`
 	Filters     []string          `json:"filters"`
 	Timeout     time.Duration     `json:"timeout"`
 	RetryCount  int               `json:"retry_count"`
 	ContentType string            `json:"content_type"`
+	Headers     map[string]string `json:"headers"`
 }
 
-// FilterRule represents a notification filter rule
+// FilterRule defines a notification filter rule
 type FilterRule struct {
-	Name       string            `json:"name"`
-	Enabled    bool              `json:"enabled"`
-	Conditions []FilterCondition `json:"conditions"`
-	Action     string            `json:"action"` // allow, deny, modify
-	Parameters map[string]string `json:"parameters"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Conditions  []FilterCondition `json:"conditions"`
+	Enabled     bool              `json:"enabled"`
 }
 
-// FilterCondition represents a condition in a filter rule
+// FilterCondition defines a single filter condition
 type FilterCondition struct {
-	Field    string `json:"field"`
-	Operator string `json:"operator"` // equals, contains, matches, greater_than, less_than
-	Value    string `json:"value"`
-	Negate   bool   `json:"negate"`
+	Field    string   `json:"field"`
+	Operator string   `json:"operator"`
+	Value    string   `json:"value"`
+	Values   []string `json:"values"`
 }
 
-// RateLimitConfig holds rate limiting configuration
-type RateLimitConfig struct {
+// RateLimitingConfig defines rate limiting configuration
+type RateLimitingConfig struct {
 	Enabled           bool          `json:"enabled"`
 	RequestsPerMinute int           `json:"requests_per_minute"`
 	BurstSize         int           `json:"burst_size"`
 	WindowSize        time.Duration `json:"window_size"`
-}
-
-// DefaultNotifierConfig returns a default notifier configuration
-func DefaultNotifierConfig() *NotifierConfig {
-	return &NotifierConfig{
-		EnableNotifications: true,
-		DefaultWebhooks:     []WebhookConfig{},
-		MaxConcurrent:       10,
-		QueueSize:           1000,
-		DeliveryTimeout:     30 * time.Second,
-		RetryAttempts:       3,
-		RetryDelay:          5 * time.Second,
-		FilterRules:         []FilterRule{},
-		Templates: map[string]string{
-			"default": `{
-				"event_id": "{{.ID}}",
-				"timestamp": "{{.Timestamp}}",
-				"source_ip": "{{.SourceIP}}",
-				"trap_oid": "{{.TrapOID}}",
-				"trap_name": "{{.TrapName}}",
-				"severity": "{{.Severity}}",
-				"status": "{{.Status}}",
-				"message": "SNMP trap received from {{.SourceIP}}: {{.TrapName}} ({{.TrapOID}})",
-				"varbinds": {{.VarbindsJSON}}
-			}`,
-			"slack": `{
-				"text": "SNMP Alert: {{.TrapName}}",
-				"attachments": [{
-					"color": "{{if eq .Severity \"critical\"}}danger{{else if eq .Severity \"major\"}}warning{{else}}good{{end}}",
-					"fields": [
-						{"title": "Source", "value": "{{.SourceIP}}", "short": true},
-						{"title": "Severity", "value": "{{.Severity}}", "short": true},
-						{"title": "Trap OID", "value": "{{.TrapOID}}", "short": false},
-						{"title": "Timestamp", "value": "{{.Timestamp}}", "short": true}
-					]
-				}]
-			}`,
-		},
-		RateLimiting: RateLimitConfig{
-			Enabled:           false,
-			RequestsPerMinute: 60,
-			BurstSize:         10,
-			WindowSize:        time.Minute,
-		},
-	}
 }
 
 // NotificationTask represents a notification delivery task
@@ -126,12 +86,11 @@ type NotificationTask struct {
 // NotificationResult represents the result of a notification delivery
 type NotificationResult struct {
 	Success      bool          `json:"success"`
-	StatusCode   int           `json:"status_code"`
-	ResponseTime time.Duration `json:"response_time"`
 	Error        string        `json:"error,omitempty"`
 	Webhook      string        `json:"webhook"`
 	EventID      int64         `json:"event_id"`
 	Attempt      int           `json:"attempt"`
+	ResponseTime time.Duration `json:"response_time"`
 }
 
 // NotifierStats tracks notification statistics
@@ -141,10 +100,10 @@ type NotifierStats struct {
 	NotificationsFailed    int64                    `json:"notifications_failed"`
 	QueueLength            int                      `json:"queue_length"`
 	QueueCapacity          int                      `json:"queue_capacity"`
+	QueueFull              int64                    `json:"queue_full"`
 	ActiveWorkers          int                      `json:"active_workers"`
 	WebhookStats           map[string]*WebhookStats `json:"webhook_stats"`
 	FilterStats            map[string]int64         `json:"filter_stats"`
-	TemplateStats          map[string]int64         `json:"template_stats"`
 	AverageDeliveryTime    time.Duration            `json:"average_delivery_time"`
 	TotalDeliveryTime      time.Duration            `json:"total_delivery_time"`
 }
@@ -155,27 +114,26 @@ type WebhookStats struct {
 	RequestsSent    int64         `json:"requests_sent"`
 	RequestsSuccess int64         `json:"requests_success"`
 	RequestsFailed  int64         `json:"requests_failed"`
+	LastUsed        time.Time     `json:"last_used"`
 	AverageLatency  time.Duration `json:"average_latency"`
-	LastSuccess     *time.Time    `json:"last_success,omitempty"`
-	LastFailure     *time.Time    `json:"last_failure,omitempty"`
-	LastError       string        `json:"last_error,omitempty"`
+	TotalLatency    time.Duration `json:"total_latency"`
 }
 
-// Notifier manages webhook notifications
+// Notifier manages webhook notifications with focus on Alertmanager integration
 type Notifier struct {
-	config         *NotifierConfig
-	client         *client.HTTPClient
-	alertConverter *alerts.AlertConverter
-	taskQueue      chan *NotificationTask
-	templates      map[string]*template.Template
-	ctx            context.Context
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
-	stats          *NotifierStats
-	mu             sync.RWMutex
+	config          *NotifierConfig
+	client          *client.HTTPClient
+	alertConverter  *alerts.AlertConverter
+	defaultTemplate *template.Template
+	taskQueue       chan *NotificationTask
+	ctx             context.Context
+	cancel          context.CancelFunc
+	wg              sync.WaitGroup
+	stats           *NotifierStats
+	mu              sync.RWMutex
 }
 
-// NewNotifier creates a new notification manager
+// NewNotifier creates a new notification service
 func NewNotifier(cfg config.Provider, httpClient *client.HTTPClient) (*Notifier, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("configuration provider cannot be nil")
@@ -184,45 +142,36 @@ func NewNotifier(cfg config.Provider, httpClient *client.HTTPClient) (*Notifier,
 		return nil, fmt.Errorf("HTTP client cannot be nil")
 	}
 
-	// Load configuration
-	notifierConfig := DefaultNotifierConfig()
-
-	if enabled, err := cfg.GetBool("notifier.enable_notifications", notifierConfig.EnableNotifications); err == nil {
-		notifierConfig.EnableNotifications = enabled
+	// Load notifier configuration
+	notifierConfig, err := loadNotifierConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load notifier configuration: %w", err)
 	}
 
-	if maxConcurrent, err := cfg.GetInt("notifier.max_concurrent", notifierConfig.MaxConcurrent); err == nil {
-		notifierConfig.MaxConcurrent = maxConcurrent
-	}
-
-	if queueSize, err := cfg.GetInt("notifier.queue_size", notifierConfig.QueueSize); err == nil {
-		notifierConfig.QueueSize = queueSize
-	}
-
-	if timeout, err := cfg.GetDuration("notifier.delivery_timeout", notifierConfig.DeliveryTimeout); err == nil {
-		notifierConfig.DeliveryTimeout = timeout
-	}
-
+	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 
-	notifier := &Notifier{
-		config:         notifierConfig,
-		client:         httpClient,
-		alertConverter: alerts.NewAlertConverter(),
-		taskQueue:      make(chan *NotificationTask, notifierConfig.QueueSize),
-		templates:      make(map[string]*template.Template),
-		ctx:            ctx,
-		cancel:         cancel,
-		stats: &NotifierStats{
-			WebhookStats:  make(map[string]*WebhookStats),
-			FilterStats:   make(map[string]int64),
-			TemplateStats: make(map[string]int64),
-		},
+	// Load default template from embedded CUE file
+	defaultTemplate, err := loadDefaultTemplate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load default template: %w", err)
 	}
 
-	// Parse templates
-	if err := notifier.parseTemplates(); err != nil {
-		return nil, fmt.Errorf("failed to parse templates: %w", err)
+	// Create alert converter for Prometheus/Alertmanager integration
+	alertConverter := alerts.NewAlertConverter()
+
+	notifier := &Notifier{
+		config:          notifierConfig,
+		client:          httpClient,
+		alertConverter:  alertConverter,
+		defaultTemplate: defaultTemplate,
+		taskQueue:       make(chan *NotificationTask, notifierConfig.QueueSize),
+		ctx:             ctx,
+		cancel:          cancel,
+		stats: &NotifierStats{
+			WebhookStats: make(map[string]*WebhookStats),
+			FilterStats:  make(map[string]int64),
+		},
 	}
 
 	// Initialize webhook stats
@@ -232,41 +181,224 @@ func NewNotifier(cfg config.Provider, httpClient *client.HTTPClient) (*Notifier,
 		}
 	}
 
-	// Start worker goroutines
-	for i := 0; i < notifierConfig.MaxConcurrent; i++ {
-		notifier.wg.Add(1)
-		go notifier.worker(i)
-	}
-
 	return notifier, nil
 }
 
-// SendNotification sends a notification for an event
+// loadNotifierConfig loads the notifier configuration from the config provider
+func loadNotifierConfig(cfg config.Provider) (*NotifierConfig, error) {
+	// Set default configuration
+	defaultConfig := &NotifierConfig{
+		EnableNotifications: true,
+		MaxConcurrent:       5,
+		QueueSize:           1000,
+		DeliveryTimeout:     30 * time.Second,
+		RetryAttempts:       3,
+		RetryDelay:          5 * time.Second,
+		DefaultWebhooks:     []WebhookConfig{},
+		FilterRules:         []FilterRule{},
+		RateLimiting: RateLimitingConfig{
+			Enabled:           false,
+			RequestsPerMinute: 60,
+			BurstSize:         10,
+			WindowSize:        time.Minute,
+		},
+	}
+
+	// Try to load configuration from provider
+	if enableNotifications, err := cfg.GetBool("notifier.enable_notifications"); err == nil {
+		defaultConfig.EnableNotifications = enableNotifications
+	}
+
+	if maxConcurrent, err := cfg.GetInt("notifier.max_concurrent"); err == nil {
+		defaultConfig.MaxConcurrent = maxConcurrent
+	}
+
+	if queueSize, err := cfg.GetInt("notifier.queue_size"); err == nil {
+		defaultConfig.QueueSize = queueSize
+	}
+
+	if deliveryTimeout, err := cfg.GetDuration("notifier.delivery_timeout"); err == nil {
+		defaultConfig.DeliveryTimeout = deliveryTimeout
+	}
+
+	if retryAttempts, err := cfg.GetInt("notifier.retry_attempts"); err == nil {
+		defaultConfig.RetryAttempts = retryAttempts
+	}
+
+	if retryDelay, err := cfg.GetDuration("notifier.retry_delay"); err == nil {
+		defaultConfig.RetryDelay = retryDelay
+	}
+
+	// Load webhook configurations
+	if webhooks, err := loadWebhookConfigs(cfg); err == nil {
+		defaultConfig.DefaultWebhooks = webhooks
+	}
+
+	return defaultConfig, nil
+}
+
+// loadWebhookConfigs loads webhook configurations from the config provider
+func loadWebhookConfigs(cfg config.Provider) ([]WebhookConfig, error) {
+	var webhooks []WebhookConfig
+
+	// Try to get webhook configurations from different possible paths
+	webhookPaths := []string{
+		"notifier.default_webhooks",
+		"webhooks",
+		"notifier.webhooks",
+	}
+
+	for _, path := range webhookPaths {
+		// Try to get webhook configurations as a map first
+		if webhookMap, err := cfg.GetMap(path); err == nil {
+			// Convert to JSON and back to parse the webhook configurations
+			jsonData, err := json.Marshal(webhookMap)
+			if err != nil {
+				continue
+			}
+
+			var parsedWebhooks []WebhookConfig
+			if err := json.Unmarshal(jsonData, &parsedWebhooks); err != nil {
+				continue
+			}
+
+			// Set defaults for webhook configurations
+			for i := range parsedWebhooks {
+				if parsedWebhooks[i].Method == "" {
+					parsedWebhooks[i].Method = "POST"
+				}
+				if parsedWebhooks[i].Format == "" {
+					parsedWebhooks[i].Format = "alertmanager"
+				}
+				if parsedWebhooks[i].ContentType == "" {
+					parsedWebhooks[i].ContentType = "application/json"
+				}
+				if parsedWebhooks[i].Timeout == 0 {
+					parsedWebhooks[i].Timeout = 10 * time.Second
+				}
+				if parsedWebhooks[i].RetryCount == 0 {
+					parsedWebhooks[i].RetryCount = 3
+				}
+				if parsedWebhooks[i].Headers == nil {
+					parsedWebhooks[i].Headers = make(map[string]string)
+				}
+			}
+
+			webhooks = parsedWebhooks
+			break
+		}
+	}
+
+	return webhooks, nil
+}
+
+// loadDefaultTemplate loads the default template from the embedded CUE file
+func loadDefaultTemplate() (*template.Template, error) {
+	// Read the embedded CUE file
+	content, err := defaultTemplate.ReadFile("templates/default.cue")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read default template: %w", err)
+	}
+
+	// Parse CUE content
+	ctx := cuecontext.New()
+	value := ctx.CompileBytes(content)
+	if err := value.Err(); err != nil {
+		return nil, fmt.Errorf("failed to compile CUE template: %w", err)
+	}
+
+	// Extract template definition
+	templateDef := value.LookupPath(cue.ParsePath("#DefaultTemplate"))
+	if !templateDef.Exists() {
+		return nil, fmt.Errorf("template definition #DefaultTemplate not found")
+	}
+
+	// Extract template string
+	templateStr := templateDef.LookupPath(cue.ParsePath("template"))
+	if !templateStr.Exists() {
+		return nil, fmt.Errorf("template string not found in CUE definition")
+	}
+
+	templateContent, err := templateStr.String()
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract template string: %w", err)
+	}
+
+	// Create Go template
+	tmpl, err := template.New("default").Parse(templateContent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Go template: %w", err)
+	}
+
+	return tmpl, nil
+}
+
+// Start starts the notification service
+func (n *Notifier) Start() error {
+	if !n.config.EnableNotifications {
+		slog.Info("Notifications are disabled")
+		return nil
+	}
+
+	slog.Info("Starting notification service",
+		"max_concurrent", n.config.MaxConcurrent,
+		"queue_size", n.config.QueueSize,
+		"webhooks", len(n.config.DefaultWebhooks))
+
+	// Start worker goroutines
+	for i := 0; i < n.config.MaxConcurrent; i++ {
+		n.wg.Add(1)
+		go n.worker(i)
+	}
+
+	return nil
+}
+
+// Stop stops the notification service gracefully
+func (n *Notifier) Stop() error {
+	slog.Info("Stopping notification service")
+
+	// Cancel context to signal workers to stop
+	n.cancel()
+
+	// Wait for all workers to finish
+	n.wg.Wait()
+
+	// Close task queue
+	close(n.taskQueue)
+
+	slog.Info("Notification service stopped")
+	return nil
+}
+
+// SendNotification sends a notification for the given event
 func (n *Notifier) SendNotification(event *storage.Event) error {
 	if !n.config.EnableNotifications {
 		return nil
 	}
 
-	n.mu.Lock()
-	n.stats.NotificationsSent++
-	n.mu.Unlock()
-
-	// Apply filters
-	if !n.shouldNotify(event) {
-		return nil
+	if event == nil {
+		return fmt.Errorf("event cannot be nil")
 	}
 
-	// Send to all configured webhooks
+	// Send to all enabled webhooks
+	var lastError error
+	sent := 0
+
 	for _, webhook := range n.config.DefaultWebhooks {
 		if !webhook.Enabled {
 			continue
 		}
 
-		// Check webhook-specific filters
-		if !n.webhookShouldNotify(&webhook, event) {
+		// Apply filters
+		if !n.passesFilters(event, webhook.Filters) {
+			n.mu.Lock()
+			n.stats.FilterStats[webhook.Name]++
+			n.mu.Unlock()
 			continue
 		}
 
+		// Create notification task
 		task := &NotificationTask{
 			Event:     event,
 			Webhook:   &webhook,
@@ -274,32 +406,39 @@ func (n *Notifier) SendNotification(event *storage.Event) error {
 			CreatedAt: time.Now(),
 		}
 
-		// Try to queue the task
+		// Send to task queue
 		select {
 		case n.taskQueue <- task:
-			// Successfully queued
+			sent++
 		default:
-			// Queue is full, drop notification
 			n.mu.Lock()
-			n.stats.NotificationsFailed++
+			n.stats.QueueFull++
 			n.mu.Unlock()
-			return fmt.Errorf("notification queue is full")
+			lastError = fmt.Errorf("notification queue is full")
 		}
+	}
+
+	if sent == 0 && lastError != nil {
+		return lastError
 	}
 
 	return nil
 }
 
 // worker processes notification tasks from the queue
-func (n *Notifier) worker(workerID int) {
+func (n *Notifier) worker(id int) {
 	defer n.wg.Done()
+
+	slog.Debug("Starting notification worker", "worker_id", id)
 
 	for {
 		select {
 		case <-n.ctx.Done():
+			slog.Debug("Notification worker stopping", "worker_id", id)
 			return
-		case task := <-n.taskQueue:
-			if task == nil {
+		case task, ok := <-n.taskQueue:
+			if !ok {
+				slog.Debug("Notification worker stopping - queue closed", "worker_id", id)
 				return
 			}
 
@@ -307,7 +446,7 @@ func (n *Notifier) worker(workerID int) {
 			n.stats.ActiveWorkers++
 			n.mu.Unlock()
 
-			result := n.deliverNotification(task)
+			result := n.processTask(task)
 			n.recordResult(result)
 
 			n.mu.Lock()
@@ -317,460 +456,103 @@ func (n *Notifier) worker(workerID int) {
 	}
 }
 
-// AddWebhook adds a new webhook configuration
-func (n *Notifier) AddWebhook(webhook *WebhookConfig) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	if webhook.Name == "" {
-		return fmt.Errorf("webhook name cannot be empty")
-	}
-
-	// Check if webhook already exists
-	for i, existing := range n.config.DefaultWebhooks {
-		if existing.Name == webhook.Name {
-			n.config.DefaultWebhooks[i] = *webhook
-			return nil
-		}
-	}
-
-	// Add new webhook
-	n.config.DefaultWebhooks = append(n.config.DefaultWebhooks, *webhook)
-
-	// Initialize stats
-	n.stats.WebhookStats[webhook.Name] = &WebhookStats{
-		Name: webhook.Name,
-	}
-
-	return nil
-}
-
-// RemoveWebhook removes a webhook configuration
-func (n *Notifier) RemoveWebhook(name string) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	for i, webhook := range n.config.DefaultWebhooks {
-		if webhook.Name == name {
-			// Remove webhook
-			n.config.DefaultWebhooks = append(n.config.DefaultWebhooks[:i], n.config.DefaultWebhooks[i+1:]...)
-
-			// Remove stats
-			delete(n.stats.WebhookStats, name)
-			return nil
-		}
-	}
-
-	return fmt.Errorf("webhook not found: %s", name)
-}
-
-// GetWebhook returns a webhook configuration by name
-func (n *Notifier) GetWebhook(name string) (*WebhookConfig, bool) {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-
-	for _, webhook := range n.config.DefaultWebhooks {
-		if webhook.Name == name {
-			return &webhook, true
-		}
-	}
-
-	return nil, false
-}
-
-// GetAllWebhooks returns all webhook configurations
-func (n *Notifier) GetAllWebhooks() []WebhookConfig {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-
-	webhooks := make([]WebhookConfig, len(n.config.DefaultWebhooks))
-	copy(webhooks, n.config.DefaultWebhooks)
-	return webhooks
-}
-
-// AddFilterRule adds a new filter rule
-func (n *Notifier) AddFilterRule(rule *FilterRule) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	if rule.Name == "" {
-		return fmt.Errorf("filter rule name cannot be empty")
-	}
-
-	// Check if rule already exists
-	for i, existing := range n.config.FilterRules {
-		if existing.Name == rule.Name {
-			n.config.FilterRules[i] = *rule
-			return nil
-		}
-	}
-
-	// Add new rule
-	n.config.FilterRules = append(n.config.FilterRules, *rule)
-	n.stats.FilterStats[rule.Name] = 0
-
-	return nil
-}
-
-// RemoveFilterRule removes a filter rule
-func (n *Notifier) RemoveFilterRule(name string) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	for i, rule := range n.config.FilterRules {
-		if rule.Name == name {
-			// Remove rule
-			n.config.FilterRules = append(n.config.FilterRules[:i], n.config.FilterRules[i+1:]...)
-
-			// Remove stats
-			delete(n.stats.FilterStats, name)
-			return nil
-		}
-	}
-
-	return fmt.Errorf("filter rule not found: %s", name)
-}
-
-// GetFilterRule returns a filter rule by name
-func (n *Notifier) GetFilterRule(name string) (*FilterRule, bool) {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-
-	for _, rule := range n.config.FilterRules {
-		if rule.Name == name {
-			return &rule, true
-		}
-	}
-
-	return nil, false
-}
-
-// GetAllFilterRules returns all filter rules
-func (n *Notifier) GetAllFilterRules() []FilterRule {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-
-	rules := make([]FilterRule, len(n.config.FilterRules))
-	copy(rules, n.config.FilterRules)
-	return rules
-}
-
-// TestWebhook tests a webhook by sending a test notification
-func (n *Notifier) TestWebhook(webhookName string) (*NotificationResult, error) {
-	webhook, exists := n.GetWebhook(webhookName)
-	if !exists {
-		return nil, fmt.Errorf("webhook not found: %s", webhookName)
-	}
-
-	// Create test event
-	testEvent := &storage.Event{
-		ID:        0,
-		Timestamp: time.Now(),
-		SourceIP:  "127.0.0.1",
-		Community: "public",
-		Version:   1,
-		PDUType:   7,
-		RequestID: 12345,
-		TrapOID:   "1.3.6.1.6.3.1.1.5.1",
-		TrapName:  "coldStart",
-		Severity:  "info",
-		Status:    "open",
-		Count:     1,
-		FirstSeen: time.Now(),
-		LastSeen:  time.Now(),
-		Varbinds:  `[{"oid":"1.3.6.1.2.1.1.3.0","type":67,"value":12345}]`,
-		Metadata:  `{"test":true}`,
-	}
-
-	// Create test task
-	task := &NotificationTask{
-		Event:     testEvent,
-		Webhook:   webhook,
-		Attempt:   0,
-		CreatedAt: time.Now(),
-	}
-
-	return n.deliverNotification(task), nil
-}
-
-// SendPrometheusAlert sends a notification using Prometheus alert format
-func (n *Notifier) SendPrometheusAlert(event *storage.Event, webhookName string) error {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-
-	// Find webhook by name in default webhooks
-	var webhook *WebhookConfig
-	for i := range n.config.DefaultWebhooks {
-		if n.config.DefaultWebhooks[i].Name == webhookName {
-			webhook = &n.config.DefaultWebhooks[i]
-			break
-		}
-	}
-
-	if webhook == nil {
-		return fmt.Errorf("webhook %s not found", webhookName)
-	}
-
-	if !webhook.Enabled {
-		return fmt.Errorf("webhook %s is disabled", webhookName)
-	}
-
-	// Create notification task with Prometheus format
-	task := &NotificationTask{
-		Event:     event,
-		Webhook:   webhook,
-		Attempt:   0,
-		CreatedAt: time.Now(),
-	}
-
-	// Send to task queue
-	select {
-	case n.taskQueue <- task:
-		return nil
-	default:
-		n.mu.Lock()
-		n.stats.QueueFull++
-		n.mu.Unlock()
-		return fmt.Errorf("notification queue is full")
-	}
-}
-
-// GetStats returns notifier statistics
-func (n *Notifier) GetStats() *NotifierStats {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-
-	// Create a copy to avoid race conditions
-	stats := &NotifierStats{
-		NotificationsSent:      n.stats.NotificationsSent,
-		NotificationsSucceeded: n.stats.NotificationsSucceeded,
-		NotificationsFailed:    n.stats.NotificationsFailed,
-		QueueLength:            len(n.taskQueue),
-		QueueCapacity:          cap(n.taskQueue),
-		ActiveWorkers:          n.stats.ActiveWorkers,
-		AverageDeliveryTime:    n.stats.AverageDeliveryTime,
-		TotalDeliveryTime:      n.stats.TotalDeliveryTime,
-		WebhookStats:           make(map[string]*WebhookStats),
-		FilterStats:            make(map[string]int64),
-		TemplateStats:          make(map[string]int64),
-	}
-
-	// Copy webhook stats
-	for name, webhookStats := range n.stats.WebhookStats {
-		stats.WebhookStats[name] = &WebhookStats{
-			Name:            webhookStats.Name,
-			RequestsSent:    webhookStats.RequestsSent,
-			RequestsSuccess: webhookStats.RequestsSuccess,
-			RequestsFailed:  webhookStats.RequestsFailed,
-			AverageLatency:  webhookStats.AverageLatency,
-			LastSuccess:     webhookStats.LastSuccess,
-			LastFailure:     webhookStats.LastFailure,
-			LastError:       webhookStats.LastError,
-		}
-	}
-
-	// Copy filter stats
-	for name, count := range n.stats.FilterStats {
-		stats.FilterStats[name] = count
-	}
-
-	// Copy template stats
-	for name, count := range n.stats.TemplateStats {
-		stats.TemplateStats[name] = count
-	}
-
-	return stats
-}
-
-// GetConfig returns the notifier configuration
-func (n *Notifier) GetConfig() *NotifierConfig {
-	return n.config
-}
-
-// UpdateConfig updates the notifier configuration
-func (n *Notifier) UpdateConfig(config *NotifierConfig) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	n.config = config
-
-	// Re-parse templates
-	n.templates = make(map[string]*template.Template)
-	return n.parseTemplates()
-}
-
-// ResetStats resets notifier statistics
-func (n *Notifier) ResetStats() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-
-	n.stats = &NotifierStats{
-		WebhookStats:  make(map[string]*WebhookStats),
-		FilterStats:   make(map[string]int64),
-		TemplateStats: make(map[string]int64),
-	}
-
-	// Reinitialize webhook stats
-	for _, webhook := range n.config.DefaultWebhooks {
-		n.stats.WebhookStats[webhook.Name] = &WebhookStats{
-			Name: webhook.Name,
-		}
-	}
-}
-
-// Close shuts down the notifier
-func (n *Notifier) Close() error {
-	n.cancel()
-	close(n.taskQueue)
-	n.wg.Wait()
-	return nil
-}
-
-// deliverNotification delivers a notification to a webhook
-func (n *Notifier) deliverNotification(task *NotificationTask) *NotificationResult {
+// processTask processes a single notification task
+func (n *Notifier) processTask(task *NotificationTask) *NotificationResult {
 	startTime := time.Now()
-
-	var payload []byte
-	var err error
-
-	// Choose payload format based on webhook configuration
-	switch task.Webhook.Format {
-	case "prometheus", "alertmanager":
-		// Use Prometheus alert format
-		alertPayload, convertErr := n.alertConverter.ConvertEventToAlertManagerPayload(task.Event)
-		if convertErr != nil {
-			return &NotificationResult{
-				Success:      false,
-				Error:        fmt.Sprintf("prometheus alert conversion failed: %v", convertErr),
-				Webhook:      task.Webhook.Name,
-				EventID:      task.Event.ID,
-				Attempt:      task.Attempt,
-				ResponseTime: time.Since(startTime),
-			}
-		}
-		payload, err = json.Marshal(alertPayload)
-		if err != nil {
-			return &NotificationResult{
-				Success:      false,
-				Error:        fmt.Sprintf("prometheus alert marshaling failed: %v", err),
-				Webhook:      task.Webhook.Name,
-				EventID:      task.Event.ID,
-				Attempt:      task.Attempt,
-				ResponseTime: time.Since(startTime),
-			}
-		}
-	default:
-		// Use custom template rendering
-		templateResult, err := n.renderTemplate(task.Webhook.Template, task.Event)
-		if err != nil {
-			return &NotificationResult{
-				Success:      false,
-				Error:        fmt.Sprintf("template rendering failed: %v", err),
-				Webhook:      task.Webhook.Name,
-				EventID:      task.Event.ID,
-				Attempt:      task.Attempt,
-				ResponseTime: time.Since(startTime),
-			}
-		}
-		// Convert template result to bytes
-		if str, ok := templateResult.(string); ok {
-			payload = []byte(str)
-		} else {
-			payload, err = json.Marshal(templateResult)
-			if err != nil {
-				return &NotificationResult{
-					Success:      false,
-					Error:        fmt.Sprintf("template result marshaling failed: %v", err),
-					Webhook:      task.Webhook.Name,
-					EventID:      task.Event.ID,
-					Attempt:      task.Attempt,
-					ResponseTime: time.Since(startTime),
-				}
-			}
-		}
-	}
-
-	// Create webhook request
-	request := &client.WebhookRequest{
-		URL:         task.Webhook.URL,
-		Method:      task.Webhook.Method,
-		Headers:     task.Webhook.Headers,
-		Body:        payload,
-		ContentType: task.Webhook.ContentType,
-	}
-
-	if request.Method == "" {
-		request.Method = "POST"
-	}
-	if request.ContentType == "" {
-		request.ContentType = "application/json"
-	}
-
-	// Set timeout
-	ctx := n.ctx
-	if task.Webhook.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(n.ctx, task.Webhook.Timeout)
-		defer cancel()
-	}
-
-	// Send webhook
-	response, err := n.client.SendWebhook(ctx, request)
-	responseTime := time.Since(startTime)
 
 	result := &NotificationResult{
 		Webhook:      task.Webhook.Name,
 		EventID:      task.Event.ID,
 		Attempt:      task.Attempt,
-		ResponseTime: responseTime,
+		ResponseTime: 0,
 	}
+
+	// Generate payload based on webhook format
+	payload, err := n.generatePayload(task.Event, task.Webhook)
+	if err != nil {
+		result.Error = fmt.Sprintf("payload generation failed: %v", err)
+		result.ResponseTime = time.Since(startTime)
+		return result
+	}
+
+	// Send HTTP request
+	err = n.sendHTTPRequest(task.Webhook, payload)
+	result.ResponseTime = time.Since(startTime)
 
 	if err != nil {
-		result.Success = false
 		result.Error = err.Error()
-	} else {
-		result.Success = response.Success
-		result.StatusCode = response.StatusCode
-		if !response.Success {
-			result.Error = response.Error
+
+		// Retry logic
+		if task.Attempt < task.Webhook.RetryCount {
+			task.Attempt++
+
+			// Schedule retry after delay
+			go func() {
+				time.Sleep(n.config.RetryDelay)
+				select {
+				case n.taskQueue <- task:
+					// Retry scheduled
+				default:
+					// Queue full, drop retry
+					slog.Warn("Failed to schedule retry - queue full",
+						"webhook", task.Webhook.Name,
+						"event_id", task.Event.ID)
+				}
+			}()
 		}
+
+		return result
 	}
 
+	result.Success = true
 	return result
 }
 
-// renderTemplate renders a notification template with event data
-func (n *Notifier) renderTemplate(templateName string, event *storage.Event) (interface{}, error) {
-	if templateName == "" {
-		templateName = "default"
+// generatePayload generates the notification payload based on webhook format
+func (n *Notifier) generatePayload(event *storage.Event, webhook *WebhookConfig) ([]byte, error) {
+	switch webhook.Format {
+	case "alertmanager", "prometheus":
+		// Use Prometheus alert format for Alertmanager
+		payload, err := n.alertConverter.ConvertEventToAlertManagerPayload(event)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert to Alertmanager format: %w", err)
+		}
+		return json.Marshal(payload)
+
+	case "custom":
+		// Use default template for custom format
+		return n.renderDefaultTemplate(event)
+
+	default:
+		// Default to Alertmanager format
+		payload, err := n.alertConverter.ConvertEventToAlertManagerPayload(event)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert to Alertmanager format: %w", err)
+		}
+		return json.Marshal(payload)
 	}
+}
 
-	tmpl, exists := n.templates[templateName]
-	if !exists {
-		return nil, fmt.Errorf("template not found: %s", templateName)
-	}
-
-	n.mu.Lock()
-	n.stats.TemplateStats[templateName]++
-	n.mu.Unlock()
-
+// renderDefaultTemplate renders the default template with event data
+func (n *Notifier) renderDefaultTemplate(event *storage.Event) ([]byte, error) {
 	// Prepare template data
 	data := map[string]interface{}{
-		"ID":           event.ID,
-		"Timestamp":    event.Timestamp.Format(time.RFC3339),
-		"SourceIP":     event.SourceIP,
-		"Community":    event.Community,
-		"Version":      event.Version,
-		"PDUType":      event.PDUType,
-		"RequestID":    event.RequestID,
-		"TrapOID":      event.TrapOID,
-		"TrapName":     event.TrapName,
-		"Severity":     event.Severity,
-		"Status":       event.Status,
-		"Acknowledged": event.Acknowledged,
-		"Count":        event.Count,
-		"FirstSeen":    event.FirstSeen.Format(time.RFC3339),
-		"LastSeen":     event.LastSeen.Format(time.RFC3339),
+		"ID":            event.ID,
+		"Timestamp":     event.Timestamp.Format(time.RFC3339),
+		"SourceIP":      event.SourceIP,
+		"Community":     event.Community,
+		"Version":       event.Version,
+		"PDUType":       event.PDUType,
+		"RequestID":     event.RequestID,
+		"TrapOID":       event.TrapOID,
+		"TrapName":      event.TrapName,
+		"Severity":      event.Severity,
+		"Status":        event.Status,
+		"Acknowledged":  event.Acknowledged,
+		"Count":         event.Count,
+		"FirstSeen":     event.FirstSeen.Format(time.RFC3339),
+		"LastSeen":      event.LastSeen.Format(time.RFC3339),
+		"CorrelationID": event.CorrelationID,
 	}
 
 	// Add varbinds as JSON string
@@ -780,144 +562,156 @@ func (n *Notifier) renderTemplate(templateName string, event *storage.Event) (in
 		data["VarbindsJSON"] = "[]"
 	}
 
-	// Add metadata
-	if event.Metadata != "" {
-		var metadata map[string]interface{}
-		if err := json.Unmarshal([]byte(event.Metadata), &metadata); err == nil {
-			for key, value := range metadata {
-				data[key] = value
-			}
-		}
-	}
-
 	// Render template
-	var buf strings.Builder
-	if err := tmpl.Execute(&buf, data); err != nil {
+	var buf bytes.Buffer
+	if err := n.defaultTemplate.Execute(&buf, data); err != nil {
 		return nil, fmt.Errorf("template execution failed: %w", err)
 	}
 
-	// Try to parse as JSON, otherwise return as string
-	var result interface{}
-	if err := json.Unmarshal([]byte(buf.String()), &result); err != nil {
-		result = buf.String()
-	}
-
-	return result, nil
+	return buf.Bytes(), nil
 }
 
-// parseTemplates parses all configured templates
-func (n *Notifier) parseTemplates() error {
-	for name, templateStr := range n.config.Templates {
-		tmpl, err := template.New(name).Parse(templateStr)
-		if err != nil {
-			return fmt.Errorf("failed to parse template %s: %w", name, err)
-		}
-		n.templates[name] = tmpl
+// sendHTTPRequest sends an HTTP request to the webhook endpoint
+func (n *Notifier) sendHTTPRequest(webhook *WebhookConfig, payload []byte) error {
+	// Create request context with timeout
+	ctx, cancel := context.WithTimeout(n.ctx, webhook.Timeout)
+	defer cancel()
+
+	// Prepare request
+	req := &client.WebhookRequest{
+		Method:  webhook.Method,
+		URL:     webhook.URL,
+		Body:    payload,
+		Headers: webhook.Headers,
+		Timeout: webhook.Timeout,
 	}
+
+	// Set default headers if not provided
+	if req.Headers == nil {
+		req.Headers = make(map[string]string)
+	}
+	if req.Headers["User-Agent"] == "" {
+		req.Headers["User-Agent"] = "nereus-snmp-listener/1.0.0"
+	}
+	if req.Headers["Content-Type"] == "" {
+		req.Headers["Content-Type"] = webhook.ContentType
+	}
+
+	// Send request
+	resp, err := n.client.SendWebhook(ctx, req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+
+	// Check response status
+	if !resp.Success {
+		return fmt.Errorf("HTTP request failed: %s", resp.Error)
+	}
+
 	return nil
 }
 
-// shouldNotify checks if an event should trigger notifications based on global filters
-func (n *Notifier) shouldNotify(event *storage.Event) bool {
-	for _, rule := range n.config.FilterRules {
-		if !rule.Enabled {
-			continue
+// passesFilters checks if an event passes the specified filters
+func (n *Notifier) passesFilters(event *storage.Event, filterNames []string) bool {
+	if len(filterNames) == 0 {
+		return true // No filters means pass all
+	}
+
+	// Find and apply each filter
+	for _, filterName := range filterNames {
+		var filter *FilterRule
+		for i := range n.config.FilterRules {
+			if n.config.FilterRules[i].Name == filterName {
+				filter = &n.config.FilterRules[i]
+				break
+			}
 		}
 
-		if n.evaluateFilterRule(&rule, event) {
-			n.mu.Lock()
-			n.stats.FilterStats[rule.Name]++
-			n.mu.Unlock()
+		if filter == nil || !filter.Enabled {
+			continue // Skip unknown or disabled filters
+		}
 
-			switch rule.Action {
-			case "deny":
-				return false
-			case "allow":
+		if !n.evaluateFilter(event, filter) {
+			return false // Event failed this filter
+		}
+	}
+
+	return true // Event passed all filters
+}
+
+// evaluateFilter evaluates a single filter against an event
+func (n *Notifier) evaluateFilter(event *storage.Event, filter *FilterRule) bool {
+	for _, condition := range filter.Conditions {
+		if !n.evaluateCondition(event, condition) {
+			return false // All conditions must pass
+		}
+	}
+	return true
+}
+
+// evaluateCondition evaluates a single filter condition against an event
+func (n *Notifier) evaluateCondition(event *storage.Event, condition FilterCondition) bool {
+	// Get field value from event
+	fieldValue := n.getEventFieldValue(event, condition.Field)
+
+	switch condition.Operator {
+	case "equals":
+		return fieldValue == condition.Value
+	case "not_equals":
+		return fieldValue != condition.Value
+	case "contains":
+		return bytes.Contains([]byte(fieldValue), []byte(condition.Value))
+	case "not_contains":
+		return !bytes.Contains([]byte(fieldValue), []byte(condition.Value))
+	case "in":
+		for _, value := range condition.Values {
+			if fieldValue == value {
 				return true
 			}
 		}
-	}
-
-	// Default to allow if no rules match
-	return true
-}
-
-// webhookShouldNotify checks if a specific webhook should receive the notification
-func (n *Notifier) webhookShouldNotify(webhook *WebhookConfig, event *storage.Event) bool {
-	// Check webhook-specific filters
-	for _, filterName := range webhook.Filters {
-		for _, rule := range n.config.FilterRules {
-			if rule.Name == filterName && rule.Enabled {
-				if n.evaluateFilterRule(&rule, event) {
-					if rule.Action == "deny" {
-						return false
-					}
-				}
+		return false
+	case "not_in":
+		for _, value := range condition.Values {
+			if fieldValue == value {
+				return false
 			}
 		}
-	}
-	return true
-}
-
-// evaluateFilterRule evaluates a filter rule against an event
-func (n *Notifier) evaluateFilterRule(rule *FilterRule, event *storage.Event) bool {
-	for _, condition := range rule.Conditions {
-		if !n.evaluateFilterCondition(&condition, event) {
-			return false // All conditions must match
-		}
-	}
-	return true
-}
-
-// evaluateFilterCondition evaluates a single filter condition
-func (n *Notifier) evaluateFilterCondition(condition *FilterCondition, event *storage.Event) bool {
-	var fieldValue string
-
-	// Get field value
-	switch condition.Field {
-	case "source_ip":
-		fieldValue = event.SourceIP
-	case "community":
-		fieldValue = event.Community
-	case "trap_oid":
-		fieldValue = event.TrapOID
-	case "trap_name":
-		fieldValue = event.TrapName
-	case "severity":
-		fieldValue = event.Severity
-	case "status":
-		fieldValue = event.Status
+		return true
 	default:
-		// Check metadata
-		if event.Metadata != "" {
-			var metadata map[string]interface{}
-			if err := json.Unmarshal([]byte(event.Metadata), &metadata); err == nil {
-				if value, exists := metadata[condition.Field]; exists {
-					fieldValue = fmt.Sprintf("%v", value)
-				}
-			}
-		}
+		return false // Unknown operator
 	}
+}
 
-	// Evaluate condition
-	result := false
-	switch condition.Operator {
-	case "equals":
-		result = fieldValue == condition.Value
-	case "contains":
-		result = strings.Contains(fieldValue, condition.Value)
-	case "matches":
-		result = strings.Contains(fieldValue, condition.Value)
-	case "not_equals":
-		result = fieldValue != condition.Value
+// getEventFieldValue extracts a field value from an event
+func (n *Notifier) getEventFieldValue(event *storage.Event, fieldName string) string {
+	switch fieldName {
+	case "id":
+		return fmt.Sprintf("%d", event.ID)
+	case "source_ip":
+		return event.SourceIP
+	case "community":
+		return event.Community
+	case "trap_oid":
+		return event.TrapOID
+	case "trap_name":
+		return event.TrapName
+	case "severity":
+		return event.Severity
+	case "status":
+		return event.Status
+	case "acknowledged":
+		return fmt.Sprintf("%t", event.Acknowledged)
+	case "correlation_id":
+		return event.CorrelationID
+	case "version":
+		return fmt.Sprintf("%d", event.Version)
+	case "pdu_type":
+		return fmt.Sprintf("%d", event.PDUType)
+	case "count":
+		return fmt.Sprintf("%d", event.Count)
+	default:
+		return ""
 	}
-
-	// Apply negation if specified
-	if condition.Negate {
-		result = !result
-	}
-
-	return result
 }
 
 // recordResult records the result of a notification delivery
@@ -925,7 +719,10 @@ func (n *Notifier) recordResult(result *NotificationResult) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	// Update global stats
+	n.stats.NotificationsSent++
 	n.stats.TotalDeliveryTime += result.ResponseTime
+	n.stats.AverageDeliveryTime = n.stats.TotalDeliveryTime / time.Duration(n.stats.NotificationsSent)
 
 	if result.Success {
 		n.stats.NotificationsSucceeded++
@@ -933,29 +730,106 @@ func (n *Notifier) recordResult(result *NotificationResult) {
 		n.stats.NotificationsFailed++
 	}
 
-	// Update webhook stats
+	// Update webhook-specific stats
 	if webhookStats, exists := n.stats.WebhookStats[result.Webhook]; exists {
 		webhookStats.RequestsSent++
+		webhookStats.TotalLatency += result.ResponseTime
+		webhookStats.AverageLatency = webhookStats.TotalLatency / time.Duration(webhookStats.RequestsSent)
+		webhookStats.LastUsed = time.Now()
+
 		if result.Success {
 			webhookStats.RequestsSuccess++
-			now := time.Now()
-			webhookStats.LastSuccess = &now
 		} else {
 			webhookStats.RequestsFailed++
-			now := time.Now()
-			webhookStats.LastFailure = &now
-			webhookStats.LastError = result.Error
-		}
-
-		// Update average latency
-		if webhookStats.RequestsSent > 0 {
-			totalLatency := webhookStats.AverageLatency * time.Duration(webhookStats.RequestsSent-1)
-			webhookStats.AverageLatency = (totalLatency + result.ResponseTime) / time.Duration(webhookStats.RequestsSent)
 		}
 	}
 
-	// Update overall average
-	if n.stats.NotificationsSent > 0 {
-		n.stats.AverageDeliveryTime = n.stats.TotalDeliveryTime / time.Duration(n.stats.NotificationsSent)
+	// Log result
+	if result.Success {
+		slog.Debug("Notification delivered successfully",
+			"webhook", result.Webhook,
+			"event_id", result.EventID,
+			"attempt", result.Attempt,
+			"response_time", result.ResponseTime)
+	} else {
+		slog.Warn("Notification delivery failed",
+			"webhook", result.Webhook,
+			"event_id", result.EventID,
+			"attempt", result.Attempt,
+			"error", result.Error,
+			"response_time", result.ResponseTime)
 	}
+}
+
+// GetStats returns current notification statistics
+func (n *Notifier) GetStats() *NotifierStats {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
+	// Update queue length
+	n.stats.QueueLength = len(n.taskQueue)
+	n.stats.QueueCapacity = cap(n.taskQueue)
+
+	// Create a deep copy to avoid race conditions
+	statsCopy := &NotifierStats{
+		NotificationsSent:      n.stats.NotificationsSent,
+		NotificationsSucceeded: n.stats.NotificationsSucceeded,
+		NotificationsFailed:    n.stats.NotificationsFailed,
+		QueueLength:            n.stats.QueueLength,
+		QueueCapacity:          n.stats.QueueCapacity,
+		QueueFull:              n.stats.QueueFull,
+		ActiveWorkers:          n.stats.ActiveWorkers,
+		AverageDeliveryTime:    n.stats.AverageDeliveryTime,
+		TotalDeliveryTime:      n.stats.TotalDeliveryTime,
+		WebhookStats:           make(map[string]*WebhookStats),
+		FilterStats:            make(map[string]int64),
+	}
+
+	// Copy webhook stats
+	for name, stats := range n.stats.WebhookStats {
+		statsCopy.WebhookStats[name] = &WebhookStats{
+			Name:            stats.Name,
+			RequestsSent:    stats.RequestsSent,
+			RequestsSuccess: stats.RequestsSuccess,
+			RequestsFailed:  stats.RequestsFailed,
+			LastUsed:        stats.LastUsed,
+			AverageLatency:  stats.AverageLatency,
+			TotalLatency:    stats.TotalLatency,
+		}
+	}
+
+	// Copy filter stats
+	for name, count := range n.stats.FilterStats {
+		statsCopy.FilterStats[name] = count
+	}
+
+	return statsCopy
+}
+
+// UpdateConfig updates the notifier configuration
+func (n *Notifier) UpdateConfig(cfg config.Provider) error {
+	newConfig, err := loadNotifierConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to load new configuration: %w", err)
+	}
+
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	n.config = newConfig
+
+	// Update webhook stats for new webhooks
+	for _, webhook := range newConfig.DefaultWebhooks {
+		if _, exists := n.stats.WebhookStats[webhook.Name]; !exists {
+			n.stats.WebhookStats[webhook.Name] = &WebhookStats{
+				Name: webhook.Name,
+			}
+		}
+	}
+
+	slog.Info("Notifier configuration updated",
+		"webhooks", len(newConfig.DefaultWebhooks),
+		"filters", len(newConfig.FilterRules))
+
+	return nil
 }

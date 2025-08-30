@@ -105,6 +105,36 @@ SNMP traps are automatically converted to Prometheus alerts with:
 
 See `examples/prometheus-config.yml` for a complete Prometheus integration example.
 
+### CUE-Based Template System
+
+Nereus uses embedded CUE templates for type-safe, validated notification formatting:
+
+#### Built-in Templates
+
+- **default**: Standard JSON notification format
+- **slack**: Slack webhook format with rich attachments
+- **pagerduty**: PagerDuty Events API v2 format
+- **email**: HTML email template with styling
+
+#### Template Configuration
+
+```yaml
+notifier:
+  default_webhooks:
+    - name: "slack-alerts"
+      url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+      template: "slack"  # Uses embedded Slack CUE template
+      format: "custom"
+```
+
+#### Template Features
+
+- **Type Safety**: CUE validation ensures template correctness
+- **Field Validation**: Required/optional field checking
+- **Severity Mapping**: Automatic color coding and priority mapping
+- **Usage Examples**: Built-in examples and documentation
+- **Performance**: Compiled templates with caching
+
 ## Usage
 
 ### Basic Commands
