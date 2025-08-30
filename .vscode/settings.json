@@ -1,0 +1,25 @@
+{
+  "cSpell.words": [
+    "alertmanager",
+    "alertname",
+    "autobuild",
+    "correlator",
+    "cuecontext",
+    "cuelang",
+    "dedupe",
+    "dylib",
+    "fsnotify",
+    "gomod",
+    "goroutines",
+    "gosnmp",
+    "junie",
+    "mgmt",
+    "oids",
+    "smarthost",
+    "snmpv",
+    "tmpl",
+    "topk",
+    "Varbind",
+    "varbinds"
+  ]
+}
