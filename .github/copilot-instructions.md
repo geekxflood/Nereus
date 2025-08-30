@@ -3,11 +3,13 @@
 Purpose: make you productive fast in this Go codebase by capturing its architecture, workflows, and house rules. Align with .augment/rules/development.md.
 
 ## Big picture
+
 - Domain: SNMPv2c trap ingestion → parse/resolve → correlate → store → notify; metrics and health exposed.
 - Orchestration in `internal/app/app.go` (see Initialize/Run/Shutdown) wires components in order: logging → metrics → reload → MIB loader/parser → resolver → storage → correlator → HTTP client → notifier → event processor → SNMP listener.
 - Data flow: `listener` receives traps → `mib` parser + `resolver` enrich OIDs → `correlator` groups/sets severity → `storage` batches to SQLite → `notifier` posts webhooks (templated) → `metrics` records.
 
 ## Key packages (service boundaries)
+
 - `internal/listener`: SNMPv2c UDP trap server with Start/Stop/IsRunning.
 - `internal/mib` + `internal/loader`: load/parse MIBs; hot-reload via `internal/reload`.
 - `internal/resolver`: OID/name resolution with caching.
@@ -18,22 +20,25 @@ Purpose: make you productive fast in this Go codebase by capturing its architect
 - `internal/events`, `internal/client`, `internal/types`: processing pipeline, HTTP client, shared structs.
 
 ## Configuration (CUE-first)
+
 - Central schema: `cmd/schemas/config.cue`. Always add/modify here first and keep backward-compat keys (e.g., `server`, `mibs`, legacy logging keys) per comments.
 - CLI: `cmd/root.go`, `cmd/generate.go`, `cmd/validate.go`. Examples for webhooks/Slack in `generate.go`.
 - Provider: `github.com/geekxflood/common/config`. Many defaults pulled with `GetString/GetInt/GetDuration`.
 
 ## Local dev workflows
+
 - Build (inject version/build info):
   - go build -ldflags "-X main.version=dev -X main.buildTime=$(date +%Y%m%d%H%M%S) -X main.commitHash=$(git rev-parse --short HEAD)" -o build/nereus ./main.go
 - Test all: go test ./...
 - Lint/security (if installed): golangci-lint run; gosec ./...
 - Run CLI:
-  - nereus                       # start listener
+  - nereus # start listener
   - nereus generate --output config.yaml
   - nereus validate --config config.yaml
 - Note: `go.mod` replaces `github.com/geekxflood/common => ../common`. Ensure the sibling module exists or remove/adjust for CI.
 
 ## Project-specific conventions
+
 - SNMP: v2c only. Validate community; handle malformed packets gracefully; extract trap OID from varbind[1] (see `storage.packetToEvent`).
 - Lifecycle: every component supports Start/Stop and health. Use DI; no globals. Pass contexts; log with `github.com/geekxflood/common/logging` and include `component` key.
 - Storage: SQLite by default; batching via `BatchSize`/`FlushInterval`. Dedup hash format is `sourceIP:trapOID:community`.
@@ -41,14 +46,35 @@ Purpose: make you productive fast in this Go codebase by capturing its architect
 - Metrics/Health: endpoints and names documented in `docs/METRICS.md` (e.g., `nereus_webhooks_*`, `nereus_traps_*`). Expose on separate port.
 
 ## Safe change patterns (examples)
+
 - Add config: update CUE schema (with defaults), load via `config.Provider`, thread through constructors, and document in README/examples.
 - Add a metric: register/update in `internal/metrics`, document in `docs/METRICS.md`.
 - New feature: prefer new `internal/<feature>` package; define an interface and inject from `app.Initialize`.
 
 ## Gotchas
+
 - CGO: `github.com/mattn/go-sqlite3` needs CGO enabled for some targets; cross-compiles may require alternatives.
 - Hot reload: register reloadable components with `reload.Manager`; validate new config before applying.
 
 Sources to study: `.augment/rules/development.md`, `internal/app/app.go`, `cmd/schemas/config.cue`, `internal/notifier/templates/`, `docs/METRICS.md`, `README.md`.
 
 If anything above is unclear or missing (e.g., exact listener internals or notifier filters), say what you need and I’ll refine this file.
+
+## Listener internals (extend/debug quickly)
+
+- Config keys: `server.host`, `server.port` (162/udp), `server.max_handlers`, `server.read_timeout`, `server.buffer_size`.
+- Start(ctx) binds UDP and spawns worker goroutines equal to `max_handlers`; a read loop copies packets and non-blocking sends into `handlers` channel.
+- If the queue is full, packets are dropped and `stats.PacketsDropped` increments. Parsing uses `internal/parser` then `internal/validator` to update `types.ListenerStats`.
+- Downstream assumption: SNMPv2c trap OID lives in varbind[1] OID `1.3.6.1.6.3.1.1.4.1.0`; storage reads this in `packetToEvent`.
+
+## Notifier specifics (filters/templates)
+
+- Webhooks: `notifier.default_webhooks` (or legacy `webhooks`). Defaults: method POST, format alertmanager, content-type application/json, timeout 10s, retry_count 3.
+- Filters: `notifier.filter_rules` referenced by webhook `filters`; non-matching increments `stats.FilterStats[webhook.Name]`.
+- Templates: default embedded CUE at `internal/notifier/templates/default.cue` compiled to Go template; custom template names resolved similarly.
+
+## Hot reload quick use
+
+- Enable via `reload.enabled: true`; set `watch_config_file`, `watch_mib_directories`, `reload_delay`, `max_reload_attempts`, `reload_timeout`, `preserve_state`, `validate_before_reload` (see `docs/HOT-RELOAD.md`).
+- App registers components implementing `Reload(config.Provider) error` and `GetReloadStats()` with the reload manager; config/MIB changes are debounced and applied safely.
+- Manual trigger: SIGHUP or programmatic `reloadManager.TriggerReload(reload.ReloadTypeConfig, "manual")`.
