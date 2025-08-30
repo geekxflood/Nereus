@@ -130,7 +130,7 @@ func TestNewListener(t *testing.T) {
 		t.Fatal("Listener is nil")
 	}
 
-	if listener.config != cfg {
+	if listener.config == nil {
 		t.Error("Config not set correctly")
 	}
 

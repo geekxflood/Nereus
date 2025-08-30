@@ -8,9 +8,7 @@ import (
 
 // SNMP version constants
 const (
-	VersionSNMPv1  = 0
 	VersionSNMPv2c = 1
-	VersionSNMPv3  = 3
 )
 
 // SNMP PDU type constants
@@ -19,7 +17,6 @@ const (
 	PDUTypeGetNextRequest = 1
 	PDUTypeGetResponse    = 2
 	PDUTypeSetRequest     = 3
-	PDUTypeTrap           = 4
 	PDUTypeGetBulkRequest = 5
 	PDUTypeInformRequest  = 6
 	PDUTypeTrapV2         = 7
@@ -63,18 +60,7 @@ const (
 	ErrorStatusInconsistentName    = 18
 )
 
-// GenericTrap constants for SNMP v1 traps
-const (
-	GenericTrapColdStart             = 0
-	GenericTrapWarmStart             = 1
-	GenericTrapLinkDown              = 2
-	GenericTrapLinkUp                = 3
-	GenericTrapAuthenticationFailure = 4
-	GenericTrapEgpNeighborLoss       = 5
-	GenericTrapEnterpriseSpecific    = 6
-)
-
-// SNMPPacket represents a parsed SNMP packet.
+// SNMPPacket represents a parsed SNMP v2c packet.
 type SNMPPacket struct {
 	Version     int       `json:"version"`
 	Community   string    `json:"community"`
@@ -84,13 +70,6 @@ type SNMPPacket struct {
 	ErrorIndex  int       `json:"error_index,omitempty"`
 	Varbinds    []Varbind `json:"varbinds"`
 	Timestamp   time.Time `json:"timestamp"`
-
-	// SNMP v1 specific fields
-	EnterpriseOID string `json:"enterprise_oid,omitempty"`
-	AgentAddress  string `json:"agent_address,omitempty"`
-	GenericTrap   int    `json:"generic_trap,omitempty"`
-	SpecificTrap  int    `json:"specific_trap,omitempty"`
-	Uptime        uint32 `json:"uptime,omitempty"`
 }
 
 // Varbind represents an SNMP variable binding.
@@ -100,15 +79,12 @@ type Varbind struct {
 	Value interface{} `json:"value"`
 }
 
-// TrapInfo represents information about an SNMP trap.
+// TrapInfo represents information about an SNMP v2c trap.
 type TrapInfo struct {
 	Version       int                    `json:"version"`
 	Community     string                 `json:"community"`
-	AgentAddress  string                 `json:"agent_address"`
-	GenericTrap   int                    `json:"generic_trap,omitempty"`
-	SpecificTrap  int                    `json:"specific_trap,omitempty"`
+	RequestID     int32                  `json:"request_id"`
 	Timestamp     time.Time              `json:"timestamp"`
-	Uptime        uint32                 `json:"uptime,omitempty"`
 	TrapOID       string                 `json:"trap_oid,omitempty"`
 	Varbinds      []Varbind              `json:"varbinds"`
 	SourceAddress string                 `json:"source_address"`
@@ -189,37 +165,11 @@ func (v VarbindValue) GetTypeName() string {
 	}
 }
 
-// GetGenericTrapName returns the human-readable name of a generic trap type.
-func GetGenericTrapName(trapType int) string {
-	switch trapType {
-	case GenericTrapColdStart:
-		return "coldStart"
-	case GenericTrapWarmStart:
-		return "warmStart"
-	case GenericTrapLinkDown:
-		return "linkDown"
-	case GenericTrapLinkUp:
-		return "linkUp"
-	case GenericTrapAuthenticationFailure:
-		return "authenticationFailure"
-	case GenericTrapEgpNeighborLoss:
-		return "egpNeighborLoss"
-	case GenericTrapEnterpriseSpecific:
-		return "enterpriseSpecific"
-	default:
-		return fmt.Sprintf("unknown(%d)", trapType)
-	}
-}
-
 // GetVersionName returns the human-readable name of an SNMP version.
 func GetVersionName(version int) string {
 	switch version {
-	case VersionSNMPv1:
-		return "SNMPv1"
 	case VersionSNMPv2c:
 		return "SNMPv2c"
-	case VersionSNMPv3:
-		return "SNMPv3"
 	default:
 		return fmt.Sprintf("Unknown(%d)", version)
 	}
@@ -236,8 +186,6 @@ func GetPDUTypeName(pduType int) string {
 		return "GetResponse"
 	case PDUTypeSetRequest:
 		return "SetRequest"
-	case PDUTypeTrap:
-		return "Trap"
 	case PDUTypeGetBulkRequest:
 		return "GetBulkRequest"
 	case PDUTypeInformRequest:

@@ -2,7 +2,6 @@
 package parser
 
 import (
-	"encoding/binary"
 	"fmt"
 	"net"
 	"time"
@@ -34,7 +33,6 @@ const (
 	tagGetNextRequest = 0xA1
 	tagGetResponse    = 0xA2
 	tagSetRequest     = 0xA3
-	tagTrap           = 0xA4
 	tagGetBulkRequest = 0xA5
 	tagInformRequest  = 0xA6
 	tagTrapV2         = 0xA7
@@ -89,12 +87,10 @@ func (p *SNMPParser) ParseSNMPPacket() (*types.SNMPPacket, error) {
 	// Parse PDU based on version
 	var packet *types.SNMPPacket
 	switch version {
-	case types.VersionSNMPv1:
-		packet, err = p.parseSNMPv1PDU()
 	case types.VersionSNMPv2c:
 		packet, err = p.parseSNMPv2cPDU()
 	default:
-		return nil, fmt.Errorf("unsupported SNMP version: %d", version)
+		return nil, fmt.Errorf("unsupported SNMP version: %d (only SNMPv2c is supported)", version)
 	}
 
 	if err != nil {
@@ -106,74 +102,6 @@ func (p *SNMPParser) ParseSNMPPacket() (*types.SNMPPacket, error) {
 	packet.Timestamp = time.Now()
 
 	return packet, nil
-}
-
-// parseSNMPv1PDU parses an SNMP v1 PDU
-func (p *SNMPParser) parseSNMPv1PDU() (*types.SNMPPacket, error) {
-	// Check PDU type
-	if p.offset >= len(p.data) {
-		return nil, fmt.Errorf("unexpected end of data")
-	}
-
-	pduType := p.data[p.offset]
-	if pduType != tagTrap {
-		return nil, fmt.Errorf("expected trap PDU, got 0x%02x", pduType)
-	}
-
-	p.offset++
-
-	// Parse PDU length
-	_, err := p.parseLength()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse PDU length: %w", err)
-	}
-
-	// Parse enterprise OID
-	enterpriseOID, err := p.parseObjectIdentifier()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse enterprise OID: %w", err)
-	}
-
-	// Parse agent address
-	agentAddr, err := p.parseIPAddress()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse agent address: %w", err)
-	}
-
-	// Parse generic trap type
-	genericTrap, err := p.parseInteger()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse generic trap: %w", err)
-	}
-
-	// Parse specific trap type
-	specificTrap, err := p.parseInteger()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse specific trap: %w", err)
-	}
-
-	// Parse timestamp
-	timestamp, err := p.parseTimeTicks()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse timestamp: %w", err)
-	}
-
-	// Parse varbind list
-	varbinds, err := p.parseVarbindList()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse varbinds: %w", err)
-	}
-
-	return &types.SNMPPacket{
-		PDUType:       types.PDUTypeTrap,
-		RequestID:     0, // Not used in v1 traps
-		Varbinds:      varbinds,
-		EnterpriseOID: enterpriseOID,
-		AgentAddress:  agentAddr,
-		GenericTrap:   int(genericTrap),
-		SpecificTrap:  int(specificTrap),
-		Uptime:        uint32(timestamp),
-	}, nil
 }
 
 // parseSNMPv2cPDU parses an SNMP v2c PDU

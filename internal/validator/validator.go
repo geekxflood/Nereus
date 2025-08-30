@@ -29,7 +29,7 @@ func DefaultValidationConfig() *ValidationConfig {
 	return &ValidationConfig{
 		MaxPacketSize:      65536,
 		MaxVarbinds:        100,
-		AllowedVersions:    []int{types.VersionSNMPv1, types.VersionSNMPv2c},
+		AllowedVersions:    []int{types.VersionSNMPv2c},
 		AllowedCommunities: []string{"public"},
 		BlockedSources:     []string{},
 		AllowedSources:     []string{},
@@ -91,10 +91,6 @@ func (v *PacketValidator) ValidatePacket(packet *types.SNMPPacket, sourceAddr st
 
 	// Validate version-specific fields
 	switch packet.Version {
-	case types.VersionSNMPv1:
-		if err := v.validateSNMPv1Fields(packet); err != nil {
-			return err
-		}
 	case types.VersionSNMPv2c:
 		if err := v.validateSNMPv2cFields(packet); err != nil {
 			return err
@@ -234,13 +230,6 @@ func (v *PacketValidator) validateCommunity(community string) error {
 // validatePDUType checks if the PDU type is valid for the SNMP version
 func (v *PacketValidator) validatePDUType(pduType, version int) error {
 	switch version {
-	case types.VersionSNMPv1:
-		if pduType != types.PDUTypeTrap {
-			return &types.ValidationError{
-				Field:   "pdu_type",
-				Message: fmt.Sprintf("PDU type %d is not valid for SNMPv1", pduType),
-			}
-		}
 	case types.VersionSNMPv2c:
 		if pduType != types.PDUTypeTrapV2 && pduType != types.PDUTypeInformRequest {
 			return &types.ValidationError{
@@ -251,7 +240,7 @@ func (v *PacketValidator) validatePDUType(pduType, version int) error {
 	default:
 		return &types.ValidationError{
 			Field:   "pdu_type",
-			Message: fmt.Sprintf("unknown SNMP version %d", version),
+			Message: fmt.Sprintf("unknown SNMP version %d (only SNMPv2c is supported)", version),
 		}
 	}
 	return nil
@@ -347,34 +336,6 @@ func (v *PacketValidator) isValidOID(oid string) bool {
 	}
 
 	return true
-}
-
-// validateSNMPv1Fields validates SNMP v1 specific fields
-func (v *PacketValidator) validateSNMPv1Fields(packet *types.SNMPPacket) error {
-	if packet.EnterpriseOID == "" {
-		return &types.ValidationError{Field: "enterprise_oid", Message: "enterprise OID is required for SNMPv1"}
-	}
-
-	if !v.isValidOID(packet.EnterpriseOID) {
-		return &types.ValidationError{Field: "enterprise_oid", Message: "invalid enterprise OID format"}
-	}
-
-	if packet.AgentAddress == "" {
-		return &types.ValidationError{Field: "agent_address", Message: "agent address is required for SNMPv1"}
-	}
-
-	if net.ParseIP(packet.AgentAddress) == nil {
-		return &types.ValidationError{Field: "agent_address", Message: "invalid agent address format"}
-	}
-
-	if packet.GenericTrap < 0 || packet.GenericTrap > 6 {
-		return &types.ValidationError{
-			Field:   "generic_trap",
-			Message: fmt.Sprintf("invalid generic trap value: %d", packet.GenericTrap),
-		}
-	}
-
-	return nil
 }
 
 // validateSNMPv2cFields validates SNMP v2c specific fields

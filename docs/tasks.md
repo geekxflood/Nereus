@@ -1,6 +1,6 @@
 # Development Task List
 
-This document outlines all remaining development tasks needed to complete the nereus SNMP trap alerting system. Tasks are organized by component and marked with completion status.
+This document outlines all remaining development tasks needed to complete the nereus SNMPv2c trap alerting system. Tasks are organized by component and marked with completion status.
 
 ## Project Status Overview
 
@@ -52,10 +52,9 @@ This document outlines all remaining development tasks needed to complete the ne
 
 **Dependencies**: Configuration system ✅
 
-### [x] SNMP Protocol Support (COMPLETED)
+### [x] SNMP Protocol Support (COMPLETED - SNMPv2c Only)
 
-- [x] SNMP v1 trap parsing
-- [x] SNMP v2c trap parsing
+- [x] SNMP v2c trap parsing (SNMPv1 removed - project is SNMPv2c only)
 - [x] Varbind extraction and processing
 - [x] Error handling for malformed packets
 - [x] Packet validation and security checks

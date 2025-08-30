@@ -1,29 +1,10 @@
 package parser
 
 import (
-	"encoding/hex"
 	"testing"
-	"time"
 
 	"github.com/geekxflood/nereus/internal/types"
 )
-
-// Test data for SNMP v1 trap packet
-var snmpv1TrapPacket = []byte{
-	0x30, 0x82, 0x00, 0x4a, // SEQUENCE, length 74
-	0x02, 0x01, 0x00, // INTEGER version 0 (SNMPv1)
-	0x04, 0x06, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, // OCTET STRING "public"
-	0xa4, 0x3d, // Trap PDU, length 61
-	0x06, 0x08, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x94, 0x78, 0x01, // Enterprise OID 1.3.6.1.4.1.18872.1
-	0x40, 0x04, 0xc0, 0xa8, 0x01, 0x01, // Agent address 192.168.1.1
-	0x02, 0x01, 0x06, // Generic trap 6 (enterprise specific)
-	0x02, 0x01, 0x01, // Specific trap 1
-	0x43, 0x04, 0x00, 0x00, 0x01, 0x2c, // Timestamp 300 (3 seconds)
-	0x30, 0x1e, // Varbind list SEQUENCE, length 30
-	0x30, 0x1c, // Varbind SEQUENCE, length 28
-	0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x94, 0x78, 0x01, 0x01, 0x01, // OID 1.3.6.1.4.1.18872.1.1.1
-	0x04, 0x0e, 0x54, 0x65, 0x73, 0x74, 0x20, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x21, 0x21, // OCTET STRING "Test message!!"
-}
 
 // Test data for SNMP v2c trap packet
 var snmpv2cTrapPacket = []byte{
@@ -63,73 +44,6 @@ func TestNewSNMPParser(t *testing.T) {
 
 	if parser.offset != 0 {
 		t.Errorf("Expected offset 0, got %d", parser.offset)
-	}
-}
-
-func TestParseSNMPv1Packet(t *testing.T) {
-	parser := NewSNMPParser(snmpv1TrapPacket)
-	packet, err := parser.ParseSNMPPacket()
-
-	if err != nil {
-		t.Fatalf("Failed to parse SNMPv1 packet: %v", err)
-	}
-
-	if packet == nil {
-		t.Fatal("Packet should not be nil")
-	}
-
-	// Verify basic packet structure
-	if packet.Version != types.VersionSNMPv1 {
-		t.Errorf("Expected version %d, got %d", types.VersionSNMPv1, packet.Version)
-	}
-
-	if packet.Community != "public" {
-		t.Errorf("Expected community 'public', got '%s'", packet.Community)
-	}
-
-	if packet.PDUType != types.PDUTypeTrap {
-		t.Errorf("Expected PDU type %d, got %d", types.PDUTypeTrap, packet.PDUType)
-	}
-
-	// Verify v1-specific fields
-	if packet.EnterpriseOID != "1.3.6.1.4.1.18872.1" {
-		t.Errorf("Expected enterprise OID '1.3.6.1.4.1.18872.1', got '%s'", packet.EnterpriseOID)
-	}
-
-	if packet.AgentAddress != "192.168.1.1" {
-		t.Errorf("Expected agent address '192.168.1.1', got '%s'", packet.AgentAddress)
-	}
-
-	if packet.GenericTrap != types.GenericTrapEnterpriseSpecific {
-		t.Errorf("Expected generic trap %d, got %d", types.GenericTrapEnterpriseSpecific, packet.GenericTrap)
-	}
-
-	if packet.SpecificTrap != 1 {
-		t.Errorf("Expected specific trap 1, got %d", packet.SpecificTrap)
-	}
-
-	if packet.Uptime != 300 {
-		t.Errorf("Expected uptime 300, got %d", packet.Uptime)
-	}
-
-	// Verify varbinds
-	if len(packet.Varbinds) != 1 {
-		t.Errorf("Expected 1 varbind, got %d", len(packet.Varbinds))
-	}
-
-	if len(packet.Varbinds) > 0 {
-		vb := packet.Varbinds[0]
-		if vb.OID != "1.3.6.1.4.1.18872.1.1.1" {
-			t.Errorf("Expected varbind OID '1.3.6.1.4.1.18872.1.1.1', got '%s'", vb.OID)
-		}
-
-		if vb.Type != types.TypeOctetString {
-			t.Errorf("Expected varbind type %d, got %d", types.TypeOctetString, vb.Type)
-		}
-
-		if string(vb.Value.([]byte)) != "Test message!!" {
-			t.Errorf("Expected varbind value 'Test message!!', got '%s'", string(vb.Value.([]byte)))
-		}
 	}
 }
 
@@ -211,6 +125,8 @@ func TestParseInvalidPackets(t *testing.T) {
 		{"Invalid tag", []byte{0x31, 0x0a, 0x02, 0x01, 0x00}},
 		{"Truncated length", []byte{0x30, 0x82}},
 		{"Invalid length", []byte{0x30, 0x82, 0xff, 0xff}},
+		{"Unsupported SNMPv1", []byte{0x30, 0x0c, 0x02, 0x01, 0x00, 0x04, 0x06, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63}}, // SNMPv1 packet
+		{"Unsupported SNMPv3", []byte{0x30, 0x0c, 0x02, 0x01, 0x03, 0x04, 0x06, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63}}, // SNMPv3 packet
 	}
 
 	for _, tc := range testCases {
