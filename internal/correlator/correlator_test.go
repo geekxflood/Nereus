@@ -132,28 +132,28 @@ func (m *mockStorage) AcknowledgeEvent(id int64, ackBy string) error {
 func TestNewCorrelator(t *testing.T) {
 	cfg := newMockConfigProvider()
 	mockStore := &mockStorage{}
-	
+
 	correlator, err := NewCorrelator(cfg, mockStore)
 	if err != nil {
 		t.Fatalf("Failed to create correlator: %v", err)
 	}
-	
+
 	if correlator == nil {
 		t.Fatal("Correlator is nil")
 	}
-	
+
 	if correlator.config == nil {
 		t.Error("Config not set")
 	}
-	
+
 	if correlator.storage == nil {
 		t.Error("Storage not set")
 	}
-	
+
 	if correlator.rules == nil {
 		t.Error("Rules map not initialized")
 	}
-	
+
 	if correlator.stats == nil {
 		t.Error("Stats not initialized")
 	}
@@ -161,12 +161,12 @@ func TestNewCorrelator(t *testing.T) {
 
 func TestNewCorrelatorNilConfig(t *testing.T) {
 	mockStore := &mockStorage{}
-	
+
 	_, err := NewCorrelator(nil, mockStore)
 	if err == nil {
 		t.Fatal("Expected error for nil config, got nil")
 	}
-	
+
 	expectedMsg := "configuration provider cannot be nil"
 	if err.Error() != expectedMsg {
 		t.Errorf("Expected error message '%s', got '%s'", expectedMsg, err.Error())
@@ -175,12 +175,12 @@ func TestNewCorrelatorNilConfig(t *testing.T) {
 
 func TestNewCorrelatorNilStorage(t *testing.T) {
 	cfg := newMockConfigProvider()
-	
+
 	_, err := NewCorrelator(cfg, nil)
 	if err == nil {
 		t.Fatal("Expected error for nil storage, got nil")
 	}
-	
+
 	expectedMsg := "storage cannot be nil"
 	if err.Error() != expectedMsg {
 		t.Errorf("Expected error message '%s', got '%s'", expectedMsg, err.Error())
@@ -189,23 +189,23 @@ func TestNewCorrelatorNilStorage(t *testing.T) {
 
 func TestDefaultCorrelatorConfig(t *testing.T) {
 	config := DefaultCorrelatorConfig()
-	
+
 	if config == nil {
 		t.Fatal("Config is nil")
 	}
-	
+
 	if !config.EnableDeduplication {
 		t.Error("Deduplication should be enabled by default")
 	}
-	
+
 	if config.DeduplicationWindow <= 0 {
 		t.Error("Invalid deduplication window")
 	}
-	
+
 	if !config.EnableCorrelation {
 		t.Error("Correlation should be enabled by default")
 	}
-	
+
 	if config.SeverityMapping == nil {
 		t.Error("Severity mapping not initialized")
 	}
