@@ -1,5 +1,5 @@
-// Package snmp provides SNMP trap listening and processing functionality.
-package snmp
+// Package listener provides SNMP trap listening functionality.
+package listener
 
 import (
 	"context"
@@ -9,40 +9,28 @@ import (
 	"time"
 
 	"github.com/geekxflood/common/config"
+	"github.com/geekxflood/nereus/internal/parser"
+	"github.com/geekxflood/nereus/internal/types"
+	"github.com/geekxflood/nereus/internal/validator"
 )
 
 // Listener represents an SNMP trap listener that receives and processes SNMP traps.
 type Listener struct {
-	config   config.Provider
-	conn     *net.UDPConn
-	handlers chan *TrapHandler
-	wg       sync.WaitGroup
-	mu       sync.RWMutex
-	running  bool
+	config    config.Provider
+	conn      *net.UDPConn
+	handlers  chan *TrapHandler
+	validator *validator.PacketValidator
+	stats     *types.ListenerStats
+	wg        sync.WaitGroup
+	mu        sync.RWMutex
+	running   bool
 }
 
 // TrapHandler represents a handler for processing individual SNMP traps.
 type TrapHandler struct {
 	Data   []byte
 	Addr   *net.UDPAddr
-	Packet *SNMPPacket
-}
-
-// SNMPPacket represents a parsed SNMP packet.
-type SNMPPacket struct {
-	Version   int
-	Community string
-	PDUType   int
-	RequestID int32
-	Varbinds  []Varbind
-	Timestamp time.Time
-}
-
-// Varbind represents an SNMP variable binding.
-type Varbind struct {
-	OID   string
-	Type  int
-	Value interface{}
+	Packet *types.SNMPPacket
 }
 
 // NewListener creates a new SNMP trap listener with the provided configuration.
@@ -57,9 +45,17 @@ func NewListener(cfg config.Provider) (*Listener, error) {
 		return nil, fmt.Errorf("failed to get max_handlers configuration: %w", err)
 	}
 
+	// Create packet validator with default configuration
+	packetValidator := validator.NewPacketValidator(validator.DefaultValidationConfig())
+
+	// Initialize statistics
+	stats := types.NewListenerStats()
+
 	return &Listener{
-		config:   cfg,
-		handlers: make(chan *TrapHandler, maxHandlers),
+		config:    cfg,
+		handlers:  make(chan *TrapHandler, maxHandlers),
+		validator: packetValidator,
+		stats:     stats,
 	}, nil
 }
 
@@ -205,7 +201,7 @@ func (l *Listener) listen(ctx context.Context) {
 				// Successfully queued for processing
 			default:
 				// Handler queue is full, drop the packet
-				// In a production system, you might want to log this
+				l.stats.PacketsDropped++
 			}
 		}
 	}
@@ -232,19 +228,38 @@ func (l *Listener) handlerWorker(ctx context.Context) {
 
 // processTrap processes an individual SNMP trap.
 func (l *Listener) processTrap(handler *TrapHandler) {
+	l.stats.PacketsReceived++
+
 	// Parse the SNMP packet
 	packet, err := l.parseSNMPPacket(handler.Data)
 	if err != nil {
+		l.stats.ParseErrors++
 		// Log parsing error but don't stop processing
 		return
 	}
 
-	// Validate community string
-	expectedCommunity, _ := l.config.GetString("server.community", "public")
-	if packet.Community != expectedCommunity {
-		// Invalid community string, ignore packet
+	// Validate the packet
+	sourceAddr := handler.Addr.IP.String()
+	if err := l.validator.ValidatePacket(packet, sourceAddr, handler.Data); err != nil {
+		l.stats.ValidationErrors++
+		// Log validation error but don't stop processing
 		return
 	}
+
+	// Update statistics
+	l.stats.PacketsProcessed++
+	l.stats.LastPacketTime = time.Now()
+
+	// Update version statistics
+	versionName := types.GetVersionName(packet.Version)
+	l.stats.PacketsByVersion[versionName]++
+
+	// Update PDU type statistics
+	pduTypeName := types.GetPDUTypeName(packet.PDUType)
+	l.stats.PacketsByType[pduTypeName]++
+
+	// Update community statistics
+	l.stats.PacketsByCommunity[packet.Community]++
 
 	// Set parsed packet in handler
 	handler.Packet = packet
@@ -254,29 +269,12 @@ func (l *Listener) processTrap(handler *TrapHandler) {
 }
 
 // parseSNMPPacket parses raw SNMP packet data into an SNMPPacket structure.
-func (l *Listener) parseSNMPPacket(data []byte) (*SNMPPacket, error) {
-	// This is a placeholder implementation
-	// In a real implementation, this would use a proper SNMP library
-	// like github.com/gosnmp/gosnmp or implement ASN.1 BER/DER parsing
-
-	if len(data) < 10 {
-		return nil, fmt.Errorf("packet too short")
-	}
-
-	// Basic validation - check for SNMP sequence tag
-	if data[0] != 0x30 {
-		return nil, fmt.Errorf("invalid SNMP packet: missing sequence tag")
-	}
-
-	// Create a basic packet structure
-	// This is a simplified implementation for demonstration
-	packet := &SNMPPacket{
-		Version:   1, // Assume SNMP v1 for now
-		Community: "public", // Default community
-		PDUType:   4, // Trap PDU
-		RequestID: 0,
-		Varbinds:  []Varbind{},
-		Timestamp: time.Now(),
+func (l *Listener) parseSNMPPacket(data []byte) (*types.SNMPPacket, error) {
+	// Use the SNMP parser
+	snmpParser := parser.NewSNMPParser(data)
+	packet, err := snmpParser.ParseSNMPPacket()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse SNMP packet: %w", err)
 	}
 
 	return packet, nil
@@ -288,9 +286,19 @@ func (l *Listener) GetStats() map[string]interface{} {
 	defer l.mu.RUnlock()
 
 	stats := map[string]interface{}{
-		"running":      l.running,
-		"queue_length": len(l.handlers),
-		"queue_cap":    cap(l.handlers),
+		"running":              l.running,
+		"queue_length":         len(l.handlers),
+		"queue_cap":            cap(l.handlers),
+		"packets_received":     l.stats.PacketsReceived,
+		"packets_processed":    l.stats.PacketsProcessed,
+		"packets_dropped":      l.stats.PacketsDropped,
+		"parse_errors":         l.stats.ParseErrors,
+		"validation_errors":    l.stats.ValidationErrors,
+		"auth_errors":          l.stats.AuthErrors,
+		"last_packet_time":     l.stats.LastPacketTime,
+		"packets_by_version":   l.stats.PacketsByVersion,
+		"packets_by_type":      l.stats.PacketsByType,
+		"packets_by_community": l.stats.PacketsByCommunity,
 	}
 
 	if l.conn != nil {
@@ -298,4 +306,17 @@ func (l *Listener) GetStats() map[string]interface{} {
 	}
 
 	return stats
+}
+
+// GetDetailedStats returns detailed listener statistics
+func (l *Listener) GetDetailedStats() *types.ListenerStats {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	// Create a copy of the stats
+	statsCopy := *l.stats
+	statsCopy.QueueLength = len(l.handlers)
+	statsCopy.QueueCapacity = cap(l.handlers)
+
+	return &statsCopy
 }

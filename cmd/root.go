@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/geekxflood/common/config"
-	"github.com/geekxflood/nereus/internal/snmp"
+	"github.com/geekxflood/nereus/internal/listener"
 	"github.com/spf13/cobra"
 )
 
@@ -81,12 +81,12 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Initialize and start SNMP trap listener
-	listener, err := snmp.NewListener(manager)
+	snmpListener, err := listener.NewListener(manager)
 	if err != nil {
 		return fmt.Errorf("failed to create SNMP listener: %w", err)
 	}
 
-	if err := listener.Start(ctx); err != nil {
+	if err := snmpListener.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start SNMP listener: %w", err)
 	}
 
@@ -103,7 +103,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Stop SNMP listener
 	fmt.Println("Stopping SNMP listener...")
-	if err := listener.Stop(); err != nil {
+	if err := snmpListener.Stop(); err != nil {
 		fmt.Printf("Error stopping SNMP listener: %v\n", err)
 	}
 

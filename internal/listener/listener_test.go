@@ -1,4 +1,4 @@
-package snmp
+package listener
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func (m *mockConfigProvider) GetString(path string, defaultValue ...string) (str
 	if len(defaultValue) > 0 {
 		return defaultValue[0], nil
 	}
-	return "", ErrPathNotFound
+	return "", fmt.Errorf("path not found: %s", path)
 }
 
 func (m *mockConfigProvider) GetInt(path string, defaultValue ...int) (int, error) {
@@ -46,7 +46,7 @@ func (m *mockConfigProvider) GetInt(path string, defaultValue ...int) (int, erro
 	if len(defaultValue) > 0 {
 		return defaultValue[0], nil
 	}
-	return 0, ErrPathNotFound
+	return 0, fmt.Errorf("path not found: %s", path)
 }
 
 func (m *mockConfigProvider) GetFloat(path string, defaultValue ...float64) (float64, error) {
@@ -58,7 +58,7 @@ func (m *mockConfigProvider) GetFloat(path string, defaultValue ...float64) (flo
 	if len(defaultValue) > 0 {
 		return defaultValue[0], nil
 	}
-	return 0, ErrPathNotFound
+	return 0, fmt.Errorf("path not found: %s", path)
 }
 
 func (m *mockConfigProvider) GetBool(path string, defaultValue ...bool) (bool, error) {
@@ -70,7 +70,7 @@ func (m *mockConfigProvider) GetBool(path string, defaultValue ...bool) (bool, e
 	if len(defaultValue) > 0 {
 		return defaultValue[0], nil
 	}
-	return false, ErrPathNotFound
+	return false, fmt.Errorf("path not found: %s", path)
 }
 
 func (m *mockConfigProvider) GetDuration(path string, defaultValue ...time.Duration) (time.Duration, error) {
@@ -85,7 +85,7 @@ func (m *mockConfigProvider) GetDuration(path string, defaultValue ...time.Durat
 	if len(defaultValue) > 0 {
 		return defaultValue[0], nil
 	}
-	return 0, ErrPathNotFound
+	return 0, fmt.Errorf("path not found: %s", path)
 }
 
 func (m *mockConfigProvider) GetStringSlice(path string, defaultValue ...[]string) ([]string, error) {
@@ -97,7 +97,7 @@ func (m *mockConfigProvider) GetStringSlice(path string, defaultValue ...[]strin
 	if len(defaultValue) > 0 {
 		return defaultValue[0], nil
 	}
-	return nil, ErrPathNotFound
+	return nil, fmt.Errorf("path not found: %s", path)
 }
 
 func (m *mockConfigProvider) GetMap(path string) (map[string]any, error) {
@@ -106,7 +106,7 @@ func (m *mockConfigProvider) GetMap(path string) (map[string]any, error) {
 			return m, nil
 		}
 	}
-	return nil, ErrPathNotFound
+	return nil, fmt.Errorf("path not found: %s", path)
 }
 
 func (m *mockConfigProvider) Exists(path string) bool {
@@ -117,9 +117,6 @@ func (m *mockConfigProvider) Exists(path string) bool {
 func (m *mockConfigProvider) Validate() error {
 	return nil
 }
-
-// Define a custom error for path not found to match the expected interface
-var ErrPathNotFound = fmt.Errorf("path not found")
 
 func TestNewListener(t *testing.T) {
 	cfg := newMockConfigProvider()
@@ -259,42 +256,5 @@ func TestListenerGetStats(t *testing.T) {
 
 	if stats["local_addr"] == nil {
 		t.Error("Stats should include local_addr when running")
-	}
-}
-
-func TestParseSNMPPacket(t *testing.T) {
-	cfg := newMockConfigProvider()
-	listener, err := NewListener(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create listener: %v", err)
-	}
-
-	// Test with invalid packet (too short)
-	shortPacket := []byte{0x30, 0x01}
-	_, err = listener.parseSNMPPacket(shortPacket)
-	if err == nil {
-		t.Error("Expected error for short packet")
-	}
-
-	// Test with invalid packet (wrong tag)
-	invalidPacket := []byte{0x31, 0x0a, 0x02, 0x01, 0x00, 0x04, 0x06, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63}
-	_, err = listener.parseSNMPPacket(invalidPacket)
-	if err == nil {
-		t.Error("Expected error for invalid packet tag")
-	}
-
-	// Test with valid-looking packet
-	validPacket := []byte{0x30, 0x0a, 0x02, 0x01, 0x00, 0x04, 0x06, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63}
-	packet, err := listener.parseSNMPPacket(validPacket)
-	if err != nil {
-		t.Errorf("Unexpected error for valid packet: %v", err)
-	}
-
-	if packet == nil {
-		t.Error("Packet should not be nil")
-	}
-
-	if packet.Version != 1 {
-		t.Errorf("Expected version 1, got %d", packet.Version)
 	}
 }

@@ -1,12 +1,12 @@
 # Nereus
 
-Nereus is an advanced SNMP trap alerting system designed to monitor, parse, and manage alerts with intelligent event correlation and notification capabilities.
+Nereus is an SNMP trap alerting system designed to monitor, parse, and manage alerts with intelligent event correlation and notification capabilities.
 
 ## Features
 
 ### 🔔 SNMP Trap Management
 
-- **Real-time Trap Reception**: Listens for SNMP traps from network devices
+- **Real-time Trap Reception**: Listens for SNMP traps
 - **MIB-based OID Parsing**: Automatically parses Object Identifiers using MIB files
 - **Event Registration**: Captures and registers trap events with full context
 - **Intelligent Resolution**: Correlates resolve trap events to automatically close alerts
@@ -24,12 +24,6 @@ Nereus is an advanced SNMP trap alerting system designed to monitor, parse, and 
 - **Configurable Templates**: Customize notification payloads and formats
 - **Multiple Endpoints**: Support for multiple webhook destinations
 - **Retry Logic**: Built-in retry mechanisms for reliable delivery
-
-### ⚙️ Enterprise Features
-
-- **Structured Logging**: Comprehensive logging with the `geekxflood/common/logging` library
-- **Configuration Management**: CUE-based configuration with hot reload with the `geekxflood/common/config` library
-- **Security**: Safe file operations and path validation
 
 ## Installation
 
@@ -120,6 +114,7 @@ services:
     image: nereus:latest
     ports:
       - "162:162/udp"
+    privileged: true
     volumes:
       - ./config.yaml:/app/config.yaml
       - ./mibs:/opt/mibs
@@ -145,7 +140,7 @@ nereus/
 
 ### Event Flow
 
-1. **Trap Reception**: SNMP traps received on UDP port 162
+1. **Trap Reception**: SNMP traps received
 2. **MIB Parsing**: OIDs parsed using loaded MIB definitions
 3. **Event Registration**: Trap data stored with correlation ID
 4. **Alert Generation**: Webhook notifications sent to configured endpoints

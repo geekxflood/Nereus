@@ -1,5 +1,5 @@
-// Package snmp provides SNMP trap listening and processing functionality.
-package snmp
+// Package types provides common SNMP types and constants.
+package types
 
 import (
 	"fmt"
@@ -62,6 +62,43 @@ const (
 	ErrorStatusNotWritable         = 17
 	ErrorStatusInconsistentName    = 18
 )
+
+// GenericTrap constants for SNMP v1 traps
+const (
+	GenericTrapColdStart             = 0
+	GenericTrapWarmStart             = 1
+	GenericTrapLinkDown              = 2
+	GenericTrapLinkUp                = 3
+	GenericTrapAuthenticationFailure = 4
+	GenericTrapEgpNeighborLoss       = 5
+	GenericTrapEnterpriseSpecific    = 6
+)
+
+// SNMPPacket represents a parsed SNMP packet.
+type SNMPPacket struct {
+	Version     int       `json:"version"`
+	Community   string    `json:"community"`
+	PDUType     int       `json:"pdu_type"`
+	RequestID   int32     `json:"request_id"`
+	ErrorStatus int       `json:"error_status,omitempty"`
+	ErrorIndex  int       `json:"error_index,omitempty"`
+	Varbinds    []Varbind `json:"varbinds"`
+	Timestamp   time.Time `json:"timestamp"`
+
+	// SNMP v1 specific fields
+	EnterpriseOID string `json:"enterprise_oid,omitempty"`
+	AgentAddress  string `json:"agent_address,omitempty"`
+	GenericTrap   int    `json:"generic_trap,omitempty"`
+	SpecificTrap  int    `json:"specific_trap,omitempty"`
+	Uptime        uint32 `json:"uptime,omitempty"`
+}
+
+// Varbind represents an SNMP variable binding.
+type Varbind struct {
+	OID   string      `json:"oid"`
+	Type  int         `json:"type"`
+	Value interface{} `json:"value"`
+}
 
 // TrapInfo represents information about an SNMP trap.
 type TrapInfo struct {
@@ -151,17 +188,6 @@ func (v VarbindValue) GetTypeName() string {
 		return fmt.Sprintf("Unknown(%d)", v.Type)
 	}
 }
-
-// GenericTrap constants for SNMP v1 traps
-const (
-	GenericTrapColdStart             = 0
-	GenericTrapWarmStart             = 1
-	GenericTrapLinkDown              = 2
-	GenericTrapLinkUp                = 3
-	GenericTrapAuthenticationFailure = 4
-	GenericTrapEgpNeighborLoss       = 5
-	GenericTrapEnterpriseSpecific    = 6
-)
 
 // GetGenericTrapName returns the human-readable name of a generic trap type.
 func GetGenericTrapName(trapType int) string {

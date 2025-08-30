@@ -5,12 +5,21 @@ This document outlines all remaining development tasks needed to complete the ne
 ## Project Status Overview
 
 - **Configuration System**: ✅ Complete
-- **SNMP Trap Listener**: ✅ Core Implementation Complete
+- **SNMP Trap Listener**: ✅ Complete (Core + Protocol Support)
 - **MIB Parser**: 🔄 Not Started
 - **Alert Management**: 🔄 Not Started
 - **Webhook Notifications**: 🔄 Not Started
-- **Testing Infrastructure**: 🔄 Partial (Basic unit tests added)
+- **Testing Infrastructure**: 🔄 In Progress (Parser tests added)
 - **Documentation**: 🔄 Partial
+
+## Requirements
+
+- When adding a new features, create a new internal package for it, avoid increasing the number of files in a specific internal package.
+- When building a binary, the following flags should be set:
+
+  ```shell
+  go build -ldflags "-X main.version=dev -X main.buildTime=$(date +%Y%m%d%H%M%S) -X main.commitHash=$(git rev-parse --short HEAD)" -o build/nereus ./main.go
+  ```
 
 ---
 
@@ -31,7 +40,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [x] Core UDP Listener Implementation (COMPLETED)
 
-- [x] Create `internal/snmp/listener.go`
+- [x] Create `internal/listener/listener.go`
 - [x] UDP socket binding and configuration
 - [x] SNMP packet parsing and validation (basic implementation)
 - [x] Community string authentication
@@ -43,26 +52,29 @@ This document outlines all remaining development tasks needed to complete the ne
 
 **Dependencies**: Configuration system ✅
 
-### [ ] SNMP Protocol Support
+### [x] SNMP Protocol Support (COMPLETED)
 
-- [ ] SNMP v1 trap parsing
-- [ ] SNMP v2c trap parsing
-- [ ] SNMP v3 trap parsing (optional)
-- [ ] Varbind extraction and processing
-- [ ] Error handling for malformed packets
-- [ ] Packet validation and security checks
+- [x] SNMP v1 trap parsing
+- [x] SNMP v2c trap parsing
+- [x] Varbind extraction and processing
+- [x] Error handling for malformed packets
+- [x] Packet validation and security checks
+- [x] ASN.1 BER/DER parsing implementation
+- [x] OID encoding/decoding
+- [x] Comprehensive packet validator
+- [x] Statistics collection and monitoring
 
-**Dependencies**: Core UDP Listener
+**Dependencies**: Core UDP Listener ✅
 
-### [ ] Testing & Validation
+### [/] Testing & Validation (IN PROGRESS)
 
-- [ ] Unit tests for SNMP packet parsing
+- [x] Unit tests for SNMP packet parsing
 - [ ] Integration tests with mock SNMP agents
 - [ ] Performance testing under load
-- [ ] Error handling validation
+- [x] Error handling validation
 - [ ] Memory leak testing
 
-**Dependencies**: SNMP Protocol Support
+**Dependencies**: SNMP Protocol Support ✅
 
 ---
 
@@ -70,7 +82,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] MIB File Loading
 
-- [ ] Create `internal/mib/loader.go`
+- [ ] Create `internal/loader/loader.go`
 - [ ] MIB file discovery and enumeration
 - [ ] Recursive directory scanning
 - [ ] File format validation (.mib, .txt)
@@ -81,7 +93,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] MIB Parsing Engine
 
-- [ ] Create `internal/mib/parser.go`
+- [ ] Create `internal/parser/parser.go`
 - [ ] ASN.1 MIB syntax parsing
 - [ ] OID tree construction
 - [ ] Symbol table generation
@@ -92,7 +104,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] OID Resolution Service
 
-- [ ] Create `internal/mib/resolver.go`
+- [ ] Create `internal/resolver/resolver.go`
 - [ ] Numeric OID to symbolic name translation
 - [ ] Description and type information lookup
 - [ ] Reverse lookup (name to OID)
@@ -117,7 +129,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] Event Data Structures
 
-- [ ] Create `internal/events/types.go`
+- [ ] Create `internal/events/events.go`
 - [ ] Trap event structure definition
 - [ ] Alert state management
 - [ ] Correlation ID generation
@@ -128,7 +140,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] Event Storage
 
-- [ ] Create `internal/events/storage.go`
+- [ ] Create `internal/storage/storage.go`
 - [ ] In-memory event store
 - [ ] Event persistence (optional)
 - [ ] Event querying and filtering
@@ -139,7 +151,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] Alert Correlation Engine
 
-- [ ] Create `internal/events/correlator.go`
+- [ ] Create `internal/correlator/correlator.go`
 - [ ] Event correlation algorithms
 - [ ] Duplicate detection
 - [ ] Related event grouping
@@ -164,7 +176,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] Webhook Client Implementation
 
-- [ ] Create `internal/webhooks/client.go`
+- [ ] Create `internal/client/client.go`
 - [ ] HTTP client with timeout configuration
 - [ ] Custom header support
 - [ ] SSL/TLS configuration
@@ -175,7 +187,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] Notification Engine
 
-- [ ] Create `internal/webhooks/notifier.go`
+- [ ] Create `internal/notifier/notifier.go`
 - [ ] Webhook payload templating
 - [ ] Multiple endpoint support
 - [ ] Filtering and routing logic
@@ -186,7 +198,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] Retry Logic & Reliability
 
-- [ ] Create `internal/webhooks/retry.go`
+- [ ] Create `internal/retry/retry.go`
 - [ ] Exponential backoff implementation
 - [ ] Dead letter queue for failed notifications
 - [ ] Circuit breaker pattern
@@ -222,7 +234,7 @@ This document outlines all remaining development tasks needed to complete the ne
 
 ### [ ] Metrics & Monitoring
 
-- [ ] Create `internal/metrics/collector.go`
+- [ ] Create `internal/metrics/metrics.go`
 - [ ] Prometheus metrics integration
 - [ ] Performance counters
 - [ ] Health check endpoints
