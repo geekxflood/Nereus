@@ -1,4 +1,139 @@
 ---
-# Nereus SNMP Trap Alerting System Configuration
-# This is a sample configuration file with default values and examples.
-# Modify the values according to your environment and requirements.
+# Application configuration
+app:
+  name: "nereus-snmp-listener"
+  version: "1.0.0"
+  log_level: "info"
+  shutdown_timeout: "30s"
+
+# SNMP Listener configuration
+listener:
+  bind_address: "0.0.0.0:162"
+  max_packet_size: 65507
+  read_timeout: "30s"
+  workers: 4
+  buffer_size: 1000
+
+# Storage configuration
+storage:
+  type: "sqlite"
+  connection_string: "./data/nereus.db"
+  max_connections: 10
+  batch_size: 100
+  batch_timeout: "5s"
+  retention_days: 30
+
+# Event correlation and deduplication
+correlator:
+  enable_deduplication: true
+  deduplication_window: "5m"
+  enable_correlation: true
+  correlation_window: "10m"
+  max_correlation_events: 100
+  auto_acknowledge: false
+  enable_flapping: true
+  flapping_threshold: 5
+  flapping_window: "2m"
+
+# Notification configuration with Prometheus/Alertmanager integration
+notifier:
+  enable_notifications: true
+  max_concurrent: 5
+  queue_size: 1000
+  delivery_timeout: "30s"
+  retry_attempts: 3
+  retry_delay: "5s"
+
+  # Webhook configurations
+  default_webhooks:
+    # Alertmanager webhook using Prometheus alert format
+    - name: "alertmanager"
+      url: "http://alertmanager:9093/api/v1/alerts"
+      method: "POST"
+      format: "alertmanager" # Use Prometheus alert format
+      enabled: true
+      timeout: "10s"
+      retry_count: 3
+      content_type: "application/json"
+      headers:
+        User-Agent: "nereus-snmp-listener/1.0.0"
+        X-Source: "snmp-trap"
+      filters:
+        - "severity_filter"
+        - "source_filter"
+
+  # Filter rules
+  filter_rules:
+    - name: "severity_filter"
+      description: "Filter by severity level"
+      conditions:
+        - field: "severity"
+          operator: "in"
+          values: ["critical", "major", "minor"]
+      enabled: true
+
+    - name: "source_filter"
+      description: "Filter by source network"
+      conditions:
+        - field: "source_ip"
+          operator: "matches"
+          value: "^192\\.168\\."
+      enabled: true
+
+    - name: "critical_only"
+      description: "Only critical alerts"
+      conditions:
+        - field: "severity"
+          operator: "equals"
+          value: "critical"
+      enabled: true
+
+# MIB configuration
+mib:
+  directories:
+    - "/usr/share/snmp/mibs"
+    - "./mibs"
+  files:
+    - "SNMPv2-MIB"
+    - "IF-MIB"
+    - "HOST-RESOURCES-MIB"
+  auto_load: true
+  validate: true
+
+# OID resolution configuration
+resolver:
+  cache_enabled: true
+  cache_size: 10000
+  cache_expiry: "1h"
+  enable_partial_oid: true
+  max_search_depth: 10
+
+# HTTP client configuration
+client:
+  timeout: "30s"
+  max_retries: 3
+  retry_delay: "2s"
+  max_idle_conns: 100
+  insecure_skip_verify: false
+  user_agent: "nereus-snmp-listener/1.0.0"
+
+# Rate limiting
+rate_limiting:
+  enabled: true
+  requests_per_second: 100
+  burst_size: 200
+  cleanup_interval: "1m"
+
+# Health check configuration
+health_check:
+  enabled: true
+  bind_address: "0.0.0.0:8080"
+  path: "/health"
+  timeout: "5s"
+
+# Metrics configuration
+metrics:
+  enabled: true
+  bind_address: "0.0.0.0:9090"
+  path: "/metrics"
+  namespace: "nereus"

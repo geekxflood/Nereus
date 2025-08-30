@@ -4,7 +4,8 @@ package app
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"io"
+	"maps"
 	"os"
 	"os/signal"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/geekxflood/common/config"
+	"github.com/geekxflood/common/logging"
 	"github.com/geekxflood/nereus/internal/client"
 	"github.com/geekxflood/nereus/internal/correlator"
 	"github.com/geekxflood/nereus/internal/events"
@@ -29,7 +31,7 @@ type ListenerInterface interface {
 	Start() error
 	Stop() error
 	IsRunning() bool
-	GetStats() map[string]interface{}
+	GetStats() map[string]any
 }
 
 // AppConfig holds configuration for the main application
@@ -94,11 +96,14 @@ type Application struct {
 	httpClient *client.HTTPClient
 	notifier   *notifier.Notifier
 
+	// Logging
+	logger        logging.Logger
+	loggerCleanup io.Closer
+
 	// Application state
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
-	logger *slog.Logger
 
 	// Statistics
 	stats *AppStats
@@ -107,15 +112,15 @@ type Application struct {
 
 // AppStats tracks application-wide statistics
 type AppStats struct {
-	StartTime           time.Time              `json:"start_time"`
-	Uptime              time.Duration          `json:"uptime"`
-	TotalTrapsReceived  int64                  `json:"total_traps_received"`
-	TotalTrapsProcessed int64                  `json:"total_traps_processed"`
-	TotalTrapsFailed    int64                  `json:"total_traps_failed"`
-	ComponentStats      map[string]interface{} `json:"component_stats"`
-	HealthStatus        string                 `json:"health_status"`
-	LastError           string                 `json:"last_error,omitempty"`
-	LastErrorTime       *time.Time             `json:"last_error_time,omitempty"`
+	StartTime           time.Time      `json:"start_time"`
+	Uptime              time.Duration  `json:"uptime"`
+	TotalTrapsReceived  int64          `json:"total_traps_received"`
+	TotalTrapsProcessed int64          `json:"total_traps_processed"`
+	TotalTrapsFailed    int64          `json:"total_traps_failed"`
+	ComponentStats      map[string]any `json:"component_stats"`
+	HealthStatus        string         `json:"health_status"`
+	LastError           string         `json:"last_error,omitempty"`
+	LastErrorTime       *time.Time     `json:"last_error_time,omitempty"`
 }
 
 // NewApplication creates a new SNMP trap listener application
@@ -146,27 +151,47 @@ func NewApplication(configManager config.Manager) (*Application, error) {
 		appConfig.ShutdownTimeout = shutdownTimeout
 	}
 
-	// Setup logger
-	logger := setupLogger(appConfig.LogLevel)
+	// Initialize logging
+	logLevel, _ := configProvider.GetString("logging.level", "info")
+	logFormat, _ := configProvider.GetString("logging.format", "json")
+
+	// Fallback to app.log_level for backward compatibility
+	if level, err := configProvider.GetString("app.log_level"); err == nil {
+		logLevel = level
+	}
+
+	loggingConfig := logging.Config{
+		Level:  logLevel,
+		Format: logFormat,
+	}
+
+	logger, cleanup, err := logging.NewLogger(loggingConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize logger: %w", err)
+	}
+
+	// Add application component context
+	appLogger := logger.With("component", "app")
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	app := &Application{
 		config:         appConfig,
 		configProvider: configProvider,
+		logger:         appLogger,
+		loggerCleanup:  cleanup,
 		ctx:            ctx,
 		cancel:         cancel,
-		logger:         logger,
 		stats: &AppStats{
 			StartTime:      time.Now(),
-			ComponentStats: make(map[string]interface{}),
+			ComponentStats: make(map[string]any),
 			HealthStatus:   "starting",
 		},
 	}
 
 	logger.Info("Creating SNMP trap listener application",
-		slog.String("name", appConfig.Name),
-		slog.String("version", appConfig.Version))
+		"name", appConfig.Name,
+		"version", appConfig.Version)
 
 	return app, nil
 }
@@ -248,7 +273,7 @@ func (a *Application) Run() error {
 	// Wait for shutdown signal
 	select {
 	case sig := <-sigChan:
-		a.logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
+		a.logger.Info("Received shutdown signal", "signal", sig.String())
 		return a.Shutdown()
 	case <-a.ctx.Done():
 		a.logger.Info("Application context cancelled")
@@ -306,6 +331,13 @@ func (a *Application) Shutdown() error {
 		}
 	}
 
+	if a.loggerCleanup != nil {
+		a.logger.Info("Shutting down logger")
+		if err := a.loggerCleanup.Close(); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("logger cleanup error: %w", err))
+		}
+	}
+
 	// Wait for background goroutines with timeout
 	done := make(chan struct{})
 	go func() {
@@ -324,7 +356,7 @@ func (a *Application) Shutdown() error {
 	a.stats.HealthStatus = "stopped"
 
 	if len(shutdownErrors) > 0 {
-		a.logger.Error("Shutdown completed with errors", slog.Int("error_count", len(shutdownErrors)))
+		a.logger.Error("Shutdown completed with errors", "error_count", len(shutdownErrors))
 		return fmt.Errorf("shutdown errors: %v", shutdownErrors)
 	}
 
@@ -512,19 +544,25 @@ func (il *IntegratedListener) trapProcessor() {
 }
 
 // handleTrap handles incoming SNMP trap packets
+// TODO: This method is currently unused but will be integrated with the listener
+// when the listener is updated to support callback-based trap processing
 func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
+	startTime := time.Now()
+
 	a.mu.Lock()
 	a.stats.TotalTrapsReceived++
 	a.mu.Unlock()
 
 	a.logger.Debug("Received SNMP trap",
-		slog.String("source_ip", sourceIP),
-		slog.String("community", packet.Community),
-		slog.Int("version", packet.Version),
-		slog.Int("pdu_type", packet.PDUType))
+		"source_ip", sourceIP,
+		"community", packet.Community,
+		"version", packet.Version,
+		"pdu_type", packet.PDUType)
 
 	// Process the trap through the event processor
 	result, err := a.processor.ProcessEventSync(packet, sourceIP)
+	processingTime := time.Since(startTime)
+
 	if err != nil {
 		a.mu.Lock()
 		a.stats.TotalTrapsFailed++
@@ -534,8 +572,13 @@ func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
 		a.mu.Unlock()
 
 		a.logger.Error("Failed to process trap",
-			slog.String("source_ip", sourceIP),
-			slog.String("error", err.Error()))
+			"operation", "process_trap",
+			"error", err.Error(),
+			"source_ip", sourceIP,
+			"processing_time", processingTime,
+			"community", packet.Community,
+			"version", packet.Version,
+			"pdu_type", packet.PDUType)
 		return
 	}
 
@@ -550,8 +593,10 @@ func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
 		a.mu.Unlock()
 
 		a.logger.Error("Trap processing failed",
-			slog.String("source_ip", sourceIP),
-			slog.String("error", result.Error.Error()))
+			"operation", "process_trap_result",
+			"error", result.Error.Error(),
+			"source_ip", sourceIP,
+			"processing_time", processingTime)
 		return
 	}
 
@@ -559,10 +604,17 @@ func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
 	a.stats.TotalTrapsProcessed++
 	a.mu.Unlock()
 
+	// Log performance metrics
+	a.logger.Debug("Performance metric",
+		"operation", "process_trap",
+		"duration", processingTime,
+		"source_ip", sourceIP,
+		"event_id", result.EventID)
+
 	a.logger.Debug("Trap processed successfully",
-		slog.String("source_ip", sourceIP),
-		slog.Int64("event_id", result.EventID),
-		slog.Duration("processing_time", result.ProcessingTime))
+		"source_ip", sourceIP,
+		"event_id", result.EventID,
+		"processing_time", processingTime)
 
 	// Send notifications if configured
 	if a.notifier != nil && result.EventID > 0 {
@@ -570,8 +622,8 @@ func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
 		if event, err := a.storage.GetEvent(result.EventID); err == nil {
 			if err := a.notifier.SendNotification(event); err != nil {
 				a.logger.Warn("Failed to send notification",
-					slog.Int64("event_id", result.EventID),
-					slog.String("error", err.Error()))
+					"event_id", result.EventID,
+					"error", err.Error())
 			}
 		}
 	}
@@ -643,10 +695,8 @@ func (a *Application) GetStats() *AppStats {
 	stats.Uptime = time.Since(a.stats.StartTime)
 
 	// Deep copy component stats
-	stats.ComponentStats = make(map[string]interface{})
-	for key, value := range a.stats.ComponentStats {
-		stats.ComponentStats[key] = value
-	}
+	stats.ComponentStats = make(map[string]any)
+	maps.Copy(stats.ComponentStats, a.stats.ComponentStats)
 
 	return &stats
 }
@@ -657,7 +707,7 @@ func (a *Application) GetConfig() *AppConfig {
 }
 
 // GetLogger returns the application logger
-func (a *Application) GetLogger() *slog.Logger {
+func (a *Application) GetLogger() logging.Logger {
 	return a.logger
 }
 
@@ -668,27 +718,7 @@ func (a *Application) IsHealthy() bool {
 	return a.stats.HealthStatus == "healthy"
 }
 
-// setupLogger configures the application logger
-func setupLogger(level string) *slog.Logger {
-	var logLevel slog.Level
-	switch level {
-	case "debug":
-		logLevel = slog.LevelDebug
-	case "info":
-		logLevel = slog.LevelInfo
-	case "warn":
-		logLevel = slog.LevelWarn
-	case "error":
-		logLevel = slog.LevelError
-	default:
-		logLevel = slog.LevelInfo
-	}
-
-	opts := &slog.HandlerOptions{
-		Level:     logLevel,
-		AddSource: level == "debug",
-	}
-
-	handler := slog.NewTextHandler(os.Stdout, opts)
-	return slog.New(handler)
+// GetComponentLogger returns a logger for a specific component
+func (a *Application) GetComponentLogger(component string) logging.Logger {
+	return a.logger.With("component", component)
 }
