@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/geekxflood/common/config"
+	"github.com/geekxflood/nereus/internal/alerts"
 	"github.com/geekxflood/nereus/internal/client"
 	"github.com/geekxflood/nereus/internal/storage"
 )
@@ -36,6 +37,7 @@ type WebhookConfig struct {
 	Method      string            `json:"method"`
 	Headers     map[string]string `json:"headers"`
 	Template    string            `json:"template"`
+	Format      string            `json:"format"` // "prometheus", "alertmanager", "custom"
 	Enabled     bool              `json:"enabled"`
 	Filters     []string          `json:"filters"`
 	Timeout     time.Duration     `json:"timeout"`
@@ -161,15 +163,16 @@ type WebhookStats struct {
 
 // Notifier manages webhook notifications
 type Notifier struct {
-	config    *NotifierConfig
-	client    *client.HTTPClient
-	taskQueue chan *NotificationTask
-	templates map[string]*template.Template
-	ctx       context.Context
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
-	stats     *NotifierStats
-	mu        sync.RWMutex
+	config         *NotifierConfig
+	client         *client.HTTPClient
+	alertConverter *alerts.AlertConverter
+	taskQueue      chan *NotificationTask
+	templates      map[string]*template.Template
+	ctx            context.Context
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
+	stats          *NotifierStats
+	mu             sync.RWMutex
 }
 
 // NewNotifier creates a new notification manager
@@ -203,12 +206,13 @@ func NewNotifier(cfg config.Provider, httpClient *client.HTTPClient) (*Notifier,
 	ctx, cancel := context.WithCancel(context.Background())
 
 	notifier := &Notifier{
-		config:    notifierConfig,
-		client:    httpClient,
-		taskQueue: make(chan *NotificationTask, notifierConfig.QueueSize),
-		templates: make(map[string]*template.Template),
-		ctx:       ctx,
-		cancel:    cancel,
+		config:         notifierConfig,
+		client:         httpClient,
+		alertConverter: alerts.NewAlertConverter(),
+		taskQueue:      make(chan *NotificationTask, notifierConfig.QueueSize),
+		templates:      make(map[string]*template.Template),
+		ctx:            ctx,
+		cancel:         cancel,
 		stats: &NotifierStats{
 			WebhookStats:  make(map[string]*WebhookStats),
 			FilterStats:   make(map[string]int64),
@@ -489,6 +493,48 @@ func (n *Notifier) TestWebhook(webhookName string) (*NotificationResult, error) 
 	return n.deliverNotification(task), nil
 }
 
+// SendPrometheusAlert sends a notification using Prometheus alert format
+func (n *Notifier) SendPrometheusAlert(event *storage.Event, webhookName string) error {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+
+	// Find webhook by name in default webhooks
+	var webhook *WebhookConfig
+	for i := range n.config.DefaultWebhooks {
+		if n.config.DefaultWebhooks[i].Name == webhookName {
+			webhook = &n.config.DefaultWebhooks[i]
+			break
+		}
+	}
+
+	if webhook == nil {
+		return fmt.Errorf("webhook %s not found", webhookName)
+	}
+
+	if !webhook.Enabled {
+		return fmt.Errorf("webhook %s is disabled", webhookName)
+	}
+
+	// Create notification task with Prometheus format
+	task := &NotificationTask{
+		Event:     event,
+		Webhook:   webhook,
+		Attempt:   0,
+		CreatedAt: time.Now(),
+	}
+
+	// Send to task queue
+	select {
+	case n.taskQueue <- task:
+		return nil
+	default:
+		n.mu.Lock()
+		n.stats.QueueFull++
+		n.mu.Unlock()
+		return fmt.Errorf("notification queue is full")
+	}
+}
+
 // GetStats returns notifier statistics
 func (n *Notifier) GetStats() *NotifierStats {
 	n.mu.RLock()
@@ -584,16 +630,63 @@ func (n *Notifier) Close() error {
 func (n *Notifier) deliverNotification(task *NotificationTask) *NotificationResult {
 	startTime := time.Now()
 
-	// Render template
-	payload, err := n.renderTemplate(task.Webhook.Template, task.Event)
-	if err != nil {
-		return &NotificationResult{
-			Success:      false,
-			Error:        fmt.Sprintf("template rendering failed: %v", err),
-			Webhook:      task.Webhook.Name,
-			EventID:      task.Event.ID,
-			Attempt:      task.Attempt,
-			ResponseTime: time.Since(startTime),
+	var payload []byte
+	var err error
+
+	// Choose payload format based on webhook configuration
+	switch task.Webhook.Format {
+	case "prometheus", "alertmanager":
+		// Use Prometheus alert format
+		alertPayload, convertErr := n.alertConverter.ConvertEventToAlertManagerPayload(task.Event)
+		if convertErr != nil {
+			return &NotificationResult{
+				Success:      false,
+				Error:        fmt.Sprintf("prometheus alert conversion failed: %v", convertErr),
+				Webhook:      task.Webhook.Name,
+				EventID:      task.Event.ID,
+				Attempt:      task.Attempt,
+				ResponseTime: time.Since(startTime),
+			}
+		}
+		payload, err = json.Marshal(alertPayload)
+		if err != nil {
+			return &NotificationResult{
+				Success:      false,
+				Error:        fmt.Sprintf("prometheus alert marshaling failed: %v", err),
+				Webhook:      task.Webhook.Name,
+				EventID:      task.Event.ID,
+				Attempt:      task.Attempt,
+				ResponseTime: time.Since(startTime),
+			}
+		}
+	default:
+		// Use custom template rendering
+		templateResult, err := n.renderTemplate(task.Webhook.Template, task.Event)
+		if err != nil {
+			return &NotificationResult{
+				Success:      false,
+				Error:        fmt.Sprintf("template rendering failed: %v", err),
+				Webhook:      task.Webhook.Name,
+				EventID:      task.Event.ID,
+				Attempt:      task.Attempt,
+				ResponseTime: time.Since(startTime),
+			}
+		}
+		// Convert template result to bytes
+		if str, ok := templateResult.(string); ok {
+			payload = []byte(str)
+		} else {
+			payload, err = json.Marshal(templateResult)
+			if err != nil {
+				return &NotificationResult{
+					Success:      false,
+					Error:        fmt.Sprintf("template result marshaling failed: %v", err),
+					Webhook:      task.Webhook.Name,
+					EventID:      task.Event.ID,
+					Attempt:      task.Attempt,
+					ResponseTime: time.Since(startTime),
+				}
+			}
 		}
 	}
 

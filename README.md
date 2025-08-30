@@ -20,7 +20,9 @@ Nereus is an SNMP trap alerting system designed to monitor, parse, and manage al
 
 ### 🚨 Alert Notifications
 
+- **Prometheus Integration**: Native support for Prometheus alert format and Alertmanager
 - **Webhook Integration**: Send alerts to external systems via HTTP webhooks
+- **Multiple Formats**: Support for Prometheus, Alertmanager, and custom template formats
 - **Configurable Templates**: Customize notification payloads and formats
 - **Multiple Endpoints**: Support for multiple webhook destinations
 - **Retry Logic**: Built-in retry mechanisms for reliable delivery
@@ -74,6 +76,34 @@ logging:
   format: "json"
   component: "nereus"
 ```
+
+### Prometheus Integration
+
+Nereus provides native support for Prometheus alert format, allowing you to send SNMP traps directly to Alertmanager or other Prometheus-compatible systems.
+
+#### Configuration Example
+
+```yaml
+notifier:
+  default_webhooks:
+    - name: "alertmanager"
+      url: "http://alertmanager:9093/api/v1/alerts"
+      method: "POST"
+      format: "alertmanager"  # Use Prometheus alert format
+      enabled: true
+      timeout: "10s"
+      content_type: "application/json"
+```
+
+#### Alert Format
+
+SNMP traps are automatically converted to Prometheus alerts with:
+
+- **Labels**: `alertname`, `source_ip`, `severity`, `trap_oid`, `trap_name`, `correlation_id`
+- **Annotations**: `summary`, `description`, `varbinds`, `metadata`, timestamps
+- **Timing**: `StartsAt` set to trap timestamp, `EndsAt` for resolved alerts
+
+See `examples/prometheus-config.yml` for a complete Prometheus integration example.
 
 ## Usage
 

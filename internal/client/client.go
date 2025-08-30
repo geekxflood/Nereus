@@ -78,15 +78,15 @@ type WebhookResponse struct {
 
 // ClientStats tracks HTTP client statistics
 type ClientStats struct {
-	RequestsSent      int64         `json:"requests_sent"`
-	RequestsSucceeded int64         `json:"requests_succeeded"`
-	RequestsFailed    int64         `json:"requests_failed"`
-	TotalRetries      int64         `json:"total_retries"`
-	AverageLatency    time.Duration `json:"average_latency"`
-	TotalLatency      time.Duration `json:"total_latency"`
-	BytesSent         int64         `json:"bytes_sent"`
-	BytesReceived     int64         `json:"bytes_received"`
-	StatusCodes       map[int]int64 `json:"status_codes"`
+	RequestsSent      int64            `json:"requests_sent"`
+	RequestsSucceeded int64            `json:"requests_succeeded"`
+	RequestsFailed    int64            `json:"requests_failed"`
+	TotalRetries      int64            `json:"total_retries"`
+	AverageLatency    time.Duration    `json:"average_latency"`
+	TotalLatency      time.Duration    `json:"total_latency"`
+	BytesSent         int64            `json:"bytes_sent"`
+	BytesReceived     int64            `json:"bytes_received"`
+	StatusCodes       map[int]int64    `json:"status_codes"`
 	ErrorTypes        map[string]int64 `json:"error_types"`
 }
 
@@ -106,27 +106,27 @@ func NewHTTPClient(cfg config.Provider) (*HTTPClient, error) {
 
 	// Load configuration
 	clientConfig := DefaultClientConfig()
-	
+
 	if timeout, err := cfg.GetDuration("client.timeout", clientConfig.Timeout); err == nil {
 		clientConfig.Timeout = timeout
 	}
-	
+
 	if maxRetries, err := cfg.GetInt("client.max_retries", clientConfig.MaxRetries); err == nil {
 		clientConfig.MaxRetries = maxRetries
 	}
-	
+
 	if retryDelay, err := cfg.GetDuration("client.retry_delay", clientConfig.RetryDelay); err == nil {
 		clientConfig.RetryDelay = retryDelay
 	}
-	
+
 	if maxIdleConns, err := cfg.GetInt("client.max_idle_conns", clientConfig.MaxIdleConns); err == nil {
 		clientConfig.MaxIdleConns = maxIdleConns
 	}
-	
+
 	if insecureSkipVerify, err := cfg.GetBool("client.insecure_skip_verify", clientConfig.InsecureSkipVerify); err == nil {
 		clientConfig.InsecureSkipVerify = insecureSkipVerify
 	}
-	
+
 	if userAgent, err := cfg.GetString("client.user_agent", clientConfig.UserAgent); err == nil {
 		clientConfig.UserAgent = userAgent
 	}
@@ -168,7 +168,7 @@ func (c *HTTPClient) SendWebhook(ctx context.Context, request *WebhookRequest) (
 	c.mu.Unlock()
 
 	startTime := time.Now()
-	
+
 	// Validate request
 	if err := c.validateRequest(request); err != nil {
 		c.recordError("validation_error")
@@ -185,14 +185,14 @@ func (c *HTTPClient) SendWebhook(ctx context.Context, request *WebhookRequest) (
 	// Send request with retries
 	var response *WebhookResponse
 	var lastErr error
-	
+
 	maxAttempts := c.config.MaxRetries + 1
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
 			c.mu.Lock()
 			c.stats.TotalRetries++
 			c.mu.Unlock()
-			
+
 			// Wait before retry
 			select {
 			case <-ctx.Done():
@@ -293,7 +293,7 @@ func (c *HTTPClient) createHTTPRequest(ctx context.Context, request *WebhookRequ
 
 		body = bytes.NewReader(bodyBytes)
 		contentLength = int64(len(bodyBytes))
-		
+
 		c.mu.Lock()
 		c.stats.BytesSent += contentLength
 		c.mu.Unlock()
@@ -397,7 +397,7 @@ func (c *HTTPClient) recordError(errorType string) {
 // categorizeError categorizes an error for statistics
 func (c *HTTPClient) categorizeError(err error) string {
 	errStr := err.Error()
-	
+
 	if strings.Contains(errStr, "timeout") {
 		return "timeout"
 	}
@@ -410,7 +410,7 @@ func (c *HTTPClient) categorizeError(err error) string {
 	if strings.Contains(errStr, "certificate") || strings.Contains(errStr, "tls") {
 		return "tls_error"
 	}
-	
+
 	return "other"
 }
 
@@ -418,7 +418,7 @@ func (c *HTTPClient) categorizeError(err error) string {
 func (c *HTTPClient) GetStats() *ClientStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	// Create a copy to avoid race conditions
 	stats := &ClientStats{
 		RequestsSent:      c.stats.RequestsSent,
@@ -432,7 +432,7 @@ func (c *HTTPClient) GetStats() *ClientStats {
 		StatusCodes:       make(map[int]int64),
 		ErrorTypes:        make(map[string]int64),
 	}
-	
+
 	// Copy maps
 	for code, count := range c.stats.StatusCodes {
 		stats.StatusCodes[code] = count
@@ -440,7 +440,7 @@ func (c *HTTPClient) GetStats() *ClientStats {
 	for errType, count := range c.stats.ErrorTypes {
 		stats.ErrorTypes[errType] = count
 	}
-	
+
 	return stats
 }
 
@@ -452,7 +452,7 @@ func (c *HTTPClient) GetConfig() *ClientConfig {
 // UpdateConfig updates the client configuration
 func (c *HTTPClient) UpdateConfig(config *ClientConfig) {
 	c.config = config
-	
+
 	// Update HTTP client timeout
 	c.httpClient.Timeout = config.Timeout
 }
@@ -461,7 +461,7 @@ func (c *HTTPClient) UpdateConfig(config *ClientConfig) {
 func (c *HTTPClient) ResetStats() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.stats = &ClientStats{
 		StatusCodes: make(map[int]int64),
 		ErrorTypes:  make(map[string]int64),
