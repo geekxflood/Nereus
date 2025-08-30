@@ -65,6 +65,7 @@ mibs:
 webhooks:
   - name: "alertmanager"
     url: "http://alertmanager:9093/api/v2/alerts"
+    insecure: false
     timeout: "30s"
     retry_count: 3
 

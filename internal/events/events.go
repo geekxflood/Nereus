@@ -9,7 +9,6 @@ import (
 
 	"github.com/geekxflood/common/config"
 	"github.com/geekxflood/nereus/internal/correlator"
-	"github.com/geekxflood/nereus/internal/mib"
 	"github.com/geekxflood/nereus/internal/resolver"
 	"github.com/geekxflood/nereus/internal/storage"
 	"github.com/geekxflood/nereus/internal/types"
@@ -68,11 +67,11 @@ type EventTask struct {
 
 // EventResult represents the result of event processing
 type EventResult struct {
-	Success      bool                   `json:"success"`
-	Error        error                  `json:"error,omitempty"`
-	EventID      int64                  `json:"event_id,omitempty"`
-	EnrichedData map[string]interface{} `json:"enriched_data,omitempty"`
-	ProcessingTime time.Duration        `json:"processing_time"`
+	Success        bool                   `json:"success"`
+	Error          error                  `json:"error,omitempty"`
+	EventID        int64                  `json:"event_id,omitempty"`
+	EnrichedData   map[string]interface{} `json:"enriched_data,omitempty"`
+	ProcessingTime time.Duration          `json:"processing_time"`
 }
 
 // ProcessorStats tracks event processor statistics
@@ -100,27 +99,27 @@ func NewEventProcessor(cfg config.Provider, resolver *resolver.Resolver, correla
 
 	// Load configuration
 	processorConfig := DefaultProcessorConfig()
-	
+
 	if enrichment, err := cfg.GetBool("processor.enable_enrichment", processorConfig.EnableEnrichment); err == nil {
 		processorConfig.EnableEnrichment = enrichment
 	}
-	
+
 	if correlation, err := cfg.GetBool("processor.enable_correlation", processorConfig.EnableCorrelation); err == nil {
 		processorConfig.EnableCorrelation = correlation
 	}
-	
+
 	if storageEnabled, err := cfg.GetBool("processor.enable_storage", processorConfig.EnableStorage); err == nil {
 		processorConfig.EnableStorage = storageEnabled
 	}
-	
+
 	if timeout, err := cfg.GetDuration("processor.processing_timeout", processorConfig.ProcessingTimeout); err == nil {
 		processorConfig.ProcessingTimeout = timeout
 	}
-	
+
 	if maxConcurrent, err := cfg.GetInt("processor.max_concurrent_events", processorConfig.MaxConcurrentEvents); err == nil {
 		processorConfig.MaxConcurrentEvents = maxConcurrent
 	}
-	
+
 	if queueSize, err := cfg.GetInt("processor.queue_size", processorConfig.QueueSize); err == nil {
 		processorConfig.QueueSize = queueSize
 	}
@@ -238,12 +237,12 @@ func (p *EventProcessor) worker(workerID int) {
 				p.stats.EventsProcessed++
 			} else {
 				p.stats.EventsFailed++
-				
+
 				// Retry logic
 				if task.Attempts < p.config.RetryAttempts {
 					task.Attempts++
 					p.stats.RetryCount++
-					
+
 					// Retry after delay
 					go func() {
 						time.Sleep(p.config.RetryDelay)
@@ -278,7 +277,7 @@ func (p *EventProcessor) worker(workerID int) {
 // processEventInternal performs the actual event processing
 func (p *EventProcessor) processEventInternal(packet *types.SNMPPacket, sourceIP string) *EventResult {
 	enrichedData := make(map[string]interface{})
-	
+
 	// Add basic metadata
 	enrichedData["source_ip"] = sourceIP
 	enrichedData["received_at"] = time.Now()
@@ -340,7 +339,7 @@ func (p *EventProcessor) processEventInternal(packet *types.SNMPPacket, sourceIP
 func (p *EventProcessor) enrichEvent(packet *types.SNMPPacket, enrichedData map[string]interface{}) error {
 	// Enrich varbinds with OID names and descriptions
 	enrichedVarbinds := make([]map[string]interface{}, len(packet.Varbinds))
-	
+
 	for i, vb := range packet.Varbinds {
 		varbindData := map[string]interface{}{
 			"oid":   vb.OID,
@@ -366,7 +365,7 @@ func (p *EventProcessor) enrichEvent(packet *types.SNMPPacket, enrichedData map[
 	if len(packet.Varbinds) > 1 && packet.Varbinds[1].OID == "1.3.6.1.6.3.1.1.4.1.0" {
 		if trapOID, ok := packet.Varbinds[1].Value.(string); ok {
 			enrichedData["trap_oid"] = trapOID
-			
+
 			// Resolve trap OID
 			if oidInfo, err := p.resolver.ResolveOID(trapOID); err == nil {
 				enrichedData["trap_name"] = oidInfo.Name

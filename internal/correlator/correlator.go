@@ -2,16 +2,25 @@
 package correlator
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/geekxflood/common/config"
-	"github.com/geekxflood/nereus/internal/storage"
 	"github.com/geekxflood/nereus/internal/types"
 )
+
+// StorageInterface defines the interface that correlator needs from storage
+type StorageInterface interface {
+	AcknowledgeEvent(id int64, ackBy string) error
+}
+
+// EventInterface defines the interface for events used in correlation
+type EventInterface interface {
+	GetID() int64
+}
 
 // CorrelatorConfig holds configuration for the event correlator
 type CorrelatorConfig struct {
@@ -82,7 +91,7 @@ type RuleAction struct {
 type EventGroup struct {
 	ID           string                 `json:"id"`
 	Name         string                 `json:"name"`
-	Events       []*storage.Event       `json:"events"`
+	Events       []EventInterface       `json:"events"`
 	FirstSeen    time.Time              `json:"first_seen"`
 	LastSeen     time.Time              `json:"last_seen"`
 	Count        int                    `json:"count"`
@@ -110,7 +119,7 @@ type CorrelatorStats struct {
 // Correlator provides event correlation and deduplication services
 type Correlator struct {
 	config        *CorrelatorConfig
-	storage       *storage.Storage
+	storage       StorageInterface
 	rules         map[string]*CorrelationRule
 	groups        map[string]*EventGroup
 	recentEvents  map[string]*RecentEvent
@@ -137,7 +146,7 @@ type FlappingState struct {
 }
 
 // NewCorrelator creates a new event correlator
-func NewCorrelator(cfg config.Provider, storage *storage.Storage) (*Correlator, error) {
+func NewCorrelator(cfg config.Provider, storage StorageInterface) (*Correlator, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("configuration provider cannot be nil")
 	}
@@ -246,7 +255,8 @@ func (c *Correlator) generateEventHash(packet *types.SNMPPacket, sourceIP string
 
 	// Create hash from source IP, trap OID, and community
 	hashInput := fmt.Sprintf("%s:%s:%s", sourceIP, trapOID, packet.Community)
-	hash := fmt.Sprintf("%x", md5.Sum([]byte(hashInput)))
+	hasher := sha256.Sum256([]byte(hashInput))
+	hash := fmt.Sprintf("%x", hasher)
 	return hash
 }
 
@@ -613,8 +623,9 @@ func (c *Correlator) AcknowledgeGroup(groupID, ackBy string) error {
 
 	// Acknowledge all events in the group
 	for _, event := range group.Events {
-		if err := c.storage.AcknowledgeEvent(event.ID, ackBy); err != nil {
-			return fmt.Errorf("failed to acknowledge event %d: %w", event.ID, err)
+		eventID := event.GetID()
+		if err := c.storage.AcknowledgeEvent(eventID, ackBy); err != nil {
+			return fmt.Errorf("failed to acknowledge event %d: %w", eventID, err)
 		}
 	}
 

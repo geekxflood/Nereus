@@ -65,6 +65,9 @@ package schemas
 	// URL endpoint to send webhook notifications
 	url: string & =~"^https?://.+"
 
+	// Whether to skip TLS verification (insecure)
+	insecure: bool | *false
+
 	// HTTP timeout for webhook requests
 	timeout: string | *"30s"
 

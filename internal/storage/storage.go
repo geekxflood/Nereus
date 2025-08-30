@@ -65,6 +65,11 @@ type Event struct {
 	CorrelationID string     `json:"correlation_id" db:"correlation_id"`
 }
 
+// GetID returns the event ID (implements EventInterface)
+func (e *Event) GetID() int64 {
+	return e.ID
+}
+
 // EventQuery represents query parameters for searching events
 type EventQuery struct {
 	StartTime     *time.Time `json:"start_time,omitempty"`

@@ -1,11 +1,9 @@
 package correlator
 
 import (
+	"github.com/geekxflood/nereus/internal/types"
 	"testing"
 	"time"
-
-	"github.com/geekxflood/nereus/internal/storage"
-	"github.com/geekxflood/nereus/internal/types"
 )
 
 // mockConfigProvider implements the config.Provider interface for testing.
@@ -127,6 +125,15 @@ func (m *mockStorage) StoreEvent(packet *types.SNMPPacket, sourceIP string, enri
 
 func (m *mockStorage) AcknowledgeEvent(id int64, ackBy string) error {
 	return nil
+}
+
+func (m *mockStorage) GetEvent(id int64) (*mockEvent, error) {
+	return &mockEvent{ID: id}, nil
+}
+
+// mockEvent represents a mock event for testing
+type mockEvent struct {
+	ID int64
 }
 
 func TestNewCorrelator(t *testing.T) {
