@@ -5,6 +5,7 @@ Nereus provides comprehensive hot reload functionality that allows you to update
 ## Overview
 
 The hot reload system monitors file changes and automatically applies updates to:
+
 - Application configuration
 - MIB files and directories
 - Webhook configurations
@@ -20,25 +21,25 @@ Enable and configure hot reload in your configuration file:
 reload:
   # Enable hot reload functionality
   enabled: true
-  
+
   # Watch the configuration file for changes
   watch_config_file: true
-  
+
   # Watch MIB directories for changes
   watch_mib_directories: true
-  
+
   # Delay before processing reload events (debounce)
   reload_delay: "2s"
-  
+
   # Maximum number of reload attempts on failure
   max_reload_attempts: 3
-  
+
   # Timeout for reload operations
   reload_timeout: "30s"
-  
+
   # Preserve application state during reload
   preserve_state: true
-  
+
   # Validate configuration before applying reload
   validate_before_reload: true
 ```
@@ -46,24 +47,28 @@ reload:
 ## Supported Reload Types
 
 ### Configuration Reload (`config`)
+
 - Monitors the main configuration file for changes
 - Validates new configuration before applying
 - Updates all registered components with new settings
 - Preserves application state and connections
 
 ### MIB File Reload (`mib`)
+
 - Monitors MIB directories for file changes
 - Supports adding, removing, and modifying MIB files
 - Updates OID resolution cache automatically
 - Maintains existing trap processing capabilities
 
 ### Webhook Reload (`webhook`)
+
 - Updates webhook configurations dynamically
 - Modifies notification templates and endpoints
 - Adjusts retry policies and timeouts
 - Preserves queued notifications
 
 ### Full Reload (`all`)
+
 - Reloads all components and configurations
 - Performs comprehensive system refresh
 - Maintains service availability throughout process
@@ -152,7 +157,7 @@ for _, event := range events {
 
 Hot reload statistics are exposed via Prometheus metrics:
 
-```
+```promql
 # Reload event counters
 nereus_reload_events_total{type="config",result="success"} 15
 nereus_reload_events_total{type="mib",result="success"} 8
@@ -188,7 +193,7 @@ func (c *MyComponent) Reload(configProvider config.Provider) error {
     if newSetting, err := configProvider.GetString("my.setting"); err == nil {
         c.setting = newSetting
     }
-    
+
     // Reinitialize resources if needed
     return c.reinitialize()
 }
@@ -239,30 +244,38 @@ app.GetReloadManager().RegisterComponent("my_component", myComponent)
 ### Common Issues
 
 1. **File permission errors**
-   ```
+
+   ```log
    ERROR: Failed to watch config file: permission denied
    ```
+
    - Ensure Nereus has read access to configuration files
    - Check file and directory permissions
 
 2. **Configuration validation failures**
-   ```
+
+   ```log
    ERROR: Configuration validation failed: invalid webhook URL
    ```
+
    - Validate configuration syntax before saving
    - Check CUE schema compliance
 
 3. **Component reload failures**
-   ```
+
+   ```log
    ERROR: Failed to reload component mib_loader: file not found
    ```
+
    - Verify component dependencies are available
    - Check component-specific error logs
 
 4. **File watcher limits**
-   ```
+
+   ```log
    ERROR: Failed to add file watcher: too many open files
    ```
+
    - Increase system file descriptor limits
    - Reduce number of watched directories
 
@@ -328,6 +341,7 @@ Hot reload is designed to have minimal performance impact:
 - **State preservation**: Existing connections and queues are maintained
 
 Typical reload times:
+
 - Configuration reload: 50-200ms
 - MIB file reload: 100-500ms (depending on file count)
 - Webhook reload: 10-50ms
