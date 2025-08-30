@@ -4,6 +4,7 @@ package correlator
 import (
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -89,17 +90,17 @@ type RuleAction struct {
 
 // EventGroup represents a group of correlated events
 type EventGroup struct {
-	ID           string                 `json:"id"`
-	Name         string                 `json:"name"`
-	Events       []EventInterface       `json:"events"`
-	FirstSeen    time.Time              `json:"first_seen"`
-	LastSeen     time.Time              `json:"last_seen"`
-	Count        int                    `json:"count"`
-	Severity     string                 `json:"severity"`
-	Status       string                 `json:"status"`
-	RuleID       string                 `json:"rule_id"`
-	Metadata     map[string]interface{} `json:"metadata"`
-	Acknowledged bool                   `json:"acknowledged"`
+	ID           string           `json:"id"`
+	Name         string           `json:"name"`
+	Events       []EventInterface `json:"events"`
+	FirstSeen    time.Time        `json:"first_seen"`
+	LastSeen     time.Time        `json:"last_seen"`
+	Count        int              `json:"count"`
+	Severity     string           `json:"severity"`
+	Status       string           `json:"status"`
+	RuleID       string           `json:"rule_id"`
+	Metadata     map[string]any   `json:"metadata"`
+	Acknowledged bool             `json:"acknowledged"`
 }
 
 // CorrelatorStats tracks correlator statistics
@@ -190,7 +191,7 @@ func NewCorrelator(cfg config.Provider, storage StorageInterface) (*Correlator, 
 }
 
 // ProcessEvent processes an event through the correlation engine
-func (c *Correlator) ProcessEvent(packet *types.SNMPPacket, sourceIP string, enrichedData map[string]interface{}) (map[string]interface{}, error) {
+func (c *Correlator) ProcessEvent(packet *types.SNMPPacket, sourceIP string, enrichedData map[string]any) (map[string]any, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -325,7 +326,7 @@ func (c *Correlator) checkFlapping(eventHash string) bool {
 }
 
 // applySeverityMapping applies severity mapping based on trap OID
-func (c *Correlator) applySeverityMapping(packet *types.SNMPPacket, enrichedData map[string]interface{}) {
+func (c *Correlator) applySeverityMapping(packet *types.SNMPPacket, enrichedData map[string]any) {
 	// Extract trap OID from varbinds
 	trapOID := ""
 	if len(packet.Varbinds) > 1 && packet.Varbinds[1].OID == "1.3.6.1.6.3.1.1.4.1.0" {
@@ -344,7 +345,7 @@ func (c *Correlator) applySeverityMapping(packet *types.SNMPPacket, enrichedData
 }
 
 // applyCorrelationRules applies correlation rules to the event
-func (c *Correlator) applyCorrelationRules(packet *types.SNMPPacket, sourceIP string, enrichedData map[string]interface{}) {
+func (c *Correlator) applyCorrelationRules(packet *types.SNMPPacket, sourceIP string, enrichedData map[string]any) {
 	for _, rule := range c.rules {
 		if !rule.Enabled {
 			continue
@@ -358,7 +359,7 @@ func (c *Correlator) applyCorrelationRules(packet *types.SNMPPacket, sourceIP st
 }
 
 // evaluateRule evaluates if a rule matches the current event
-func (c *Correlator) evaluateRule(rule *CorrelationRule, packet *types.SNMPPacket, sourceIP string, enrichedData map[string]interface{}) bool {
+func (c *Correlator) evaluateRule(rule *CorrelationRule, packet *types.SNMPPacket, sourceIP string, enrichedData map[string]any) bool {
 	for _, condition := range rule.Conditions {
 		if !c.evaluateCondition(condition, packet, sourceIP, enrichedData) {
 			return false // All conditions must match
@@ -368,7 +369,7 @@ func (c *Correlator) evaluateRule(rule *CorrelationRule, packet *types.SNMPPacke
 }
 
 // evaluateCondition evaluates a single rule condition
-func (c *Correlator) evaluateCondition(condition RuleCondition, packet *types.SNMPPacket, sourceIP string, enrichedData map[string]interface{}) bool {
+func (c *Correlator) evaluateCondition(condition RuleCondition, packet *types.SNMPPacket, sourceIP string, enrichedData map[string]any) bool {
 	var fieldValue string
 
 	// Get field value
@@ -419,7 +420,7 @@ func (c *Correlator) evaluateCondition(condition RuleCondition, packet *types.SN
 }
 
 // executeRuleActions executes the actions for a matched rule
-func (c *Correlator) executeRuleActions(rule *CorrelationRule, packet *types.SNMPPacket, sourceIP string, enrichedData map[string]interface{}) {
+func (c *Correlator) executeRuleActions(rule *CorrelationRule, packet *types.SNMPPacket, sourceIP string, enrichedData map[string]any) {
 	for _, action := range rule.Actions {
 		switch action.Type {
 		case "set_severity":
@@ -443,7 +444,7 @@ func (c *Correlator) executeRuleActions(rule *CorrelationRule, packet *types.SNM
 }
 
 // correlateEvent correlates an event with existing groups
-func (c *Correlator) correlateEvent(rule *CorrelationRule, packet *types.SNMPPacket, sourceIP string, enrichedData map[string]interface{}) {
+func (c *Correlator) correlateEvent(rule *CorrelationRule, _ *types.SNMPPacket, sourceIP string, enrichedData map[string]any) {
 	groupID := fmt.Sprintf("%s:%s", rule.ID, sourceIP)
 
 	if group, exists := c.groups[groupID]; exists {
@@ -461,7 +462,7 @@ func (c *Correlator) correlateEvent(rule *CorrelationRule, packet *types.SNMPPac
 			LastSeen:  time.Now(),
 			Count:     1,
 			RuleID:    rule.ID,
-			Metadata:  make(map[string]interface{}),
+			Metadata:  make(map[string]any),
 		}
 
 		if severity, exists := enrichedData["severity"]; exists {
@@ -582,9 +583,7 @@ func (c *Correlator) GetAllRules() map[string]*CorrelationRule {
 	defer c.mu.RUnlock()
 
 	rules := make(map[string]*CorrelationRule)
-	for id, rule := range c.rules {
-		rules[id] = rule
-	}
+	maps.Copy(rules, c.rules)
 	return rules
 }
 
@@ -594,9 +593,7 @@ func (c *Correlator) GetEventGroups() map[string]*EventGroup {
 	defer c.mu.RUnlock()
 
 	groups := make(map[string]*EventGroup)
-	for id, group := range c.groups {
-		groups[id] = group
-	}
+	maps.Copy(groups, c.groups)
 	return groups
 }
 
@@ -686,9 +683,7 @@ func (c *Correlator) GetRecentEvents() map[string]*RecentEvent {
 	defer c.mu.RUnlock()
 
 	recent := make(map[string]*RecentEvent)
-	for hash, event := range c.recentEvents {
-		recent[hash] = event
-	}
+	maps.Copy(recent, c.recentEvents)
 	return recent
 }
 
@@ -698,9 +693,7 @@ func (c *Correlator) GetFlappingState() map[string]*FlappingState {
 	defer c.mu.RUnlock()
 
 	flapping := make(map[string]*FlappingState)
-	for hash, state := range c.flappingState {
-		flapping[hash] = state
-	}
+	maps.Copy(flapping, c.flappingState)
 	return flapping
 }
 

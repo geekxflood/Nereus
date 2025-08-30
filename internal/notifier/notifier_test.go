@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,20 +17,20 @@ import (
 
 // MockConfigProvider implements config.Provider for testing
 type MockConfigProvider struct {
-	data map[string]interface{}
+	data map[string]any
 }
 
 func NewMockConfigProvider() *MockConfigProvider {
 	return &MockConfigProvider{
-		data: make(map[string]interface{}),
+		data: make(map[string]any),
 	}
 }
 
-func (m *MockConfigProvider) Set(key string, value interface{}) {
+func (m *MockConfigProvider) Set(key string, value any) {
 	m.data[key] = value
 }
 
-func (m *MockConfigProvider) Get(key string) (interface{}, error) {
+func (m *MockConfigProvider) Get(key string) (any, error) {
 	if value, exists := m.data[key]; exists {
 		return value, nil
 	}
@@ -138,11 +139,9 @@ func (m *MockConfigProvider) AllKeys() []string {
 	return keys
 }
 
-func (m *MockConfigProvider) AllSettings() map[string]interface{} {
-	result := make(map[string]interface{})
-	for key, value := range m.data {
-		result[key] = value
-	}
+func (m *MockConfigProvider) AllSettings() map[string]any {
+	result := make(map[string]any)
+	maps.Copy(result, m.data)
 	return result
 }
 
@@ -188,7 +187,7 @@ func createTestConfig() *MockConfigProvider {
 	cfg.Set("notifier.retry_delay", "1s")
 
 	// Set webhook configuration
-	webhooks := []map[string]interface{}{
+	webhooks := []map[string]any{
 		{
 			"name":         "test-webhook",
 			"url":          "http://localhost:8080/webhook",
@@ -283,7 +282,7 @@ func TestLoadDefaultTemplate(t *testing.T) {
 
 	// Test template execution
 	event := createTestEvent()
-	data := map[string]interface{}{
+	data := map[string]any{
 		"ID":            event.ID,
 		"Timestamp":     event.Timestamp.Format(time.RFC3339),
 		"SourceIP":      event.SourceIP,
@@ -310,7 +309,7 @@ func TestLoadDefaultTemplate(t *testing.T) {
 	}
 
 	// Verify the output is valid JSON
-	var result map[string]interface{}
+	var result map[string]any
 	err = json.Unmarshal(buf.Bytes(), &result)
 	if err != nil {
 		t.Fatalf("Template output is not valid JSON: %v", err)
@@ -422,7 +421,7 @@ func TestGeneratePayloadCustom(t *testing.T) {
 	}
 
 	// Verify it's valid JSON
-	var result map[string]interface{}
+	var result map[string]any
 	err = json.Unmarshal(payload, &result)
 	if err != nil {
 		t.Fatalf("Payload is not valid JSON: %v", err)
@@ -455,7 +454,7 @@ func TestSendNotificationWithMockServer(t *testing.T) {
 
 	// Create test configuration with mock server URL
 	cfg := createTestConfig()
-	webhooks := []map[string]interface{}{
+	webhooks := []map[string]any{
 		{
 			"name":         "test-webhook",
 			"url":          server.URL,

@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"sync"
 	"text/template"
 	"time"
@@ -148,9 +150,6 @@ func NewNotifier(cfg config.Provider, httpClient *client.HTTPClient) (*Notifier,
 		return nil, fmt.Errorf("failed to load notifier configuration: %w", err)
 	}
 
-	// Create context for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-
 	// Load default template from embedded CUE file
 	defaultTemplate, err := loadDefaultTemplate()
 	if err != nil {
@@ -159,6 +158,9 @@ func NewNotifier(cfg config.Provider, httpClient *client.HTTPClient) (*Notifier,
 
 	// Create alert converter for Prometheus/Alertmanager integration
 	alertConverter := alerts.NewAlertConverter()
+
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
 
 	notifier := &Notifier{
 		config:          notifierConfig,
@@ -536,7 +538,7 @@ func (n *Notifier) generatePayload(event *storage.Event, webhook *WebhookConfig)
 // renderDefaultTemplate renders the default template with event data
 func (n *Notifier) renderDefaultTemplate(event *storage.Event) ([]byte, error) {
 	// Prepare template data
-	data := map[string]interface{}{
+	data := map[string]any{
 		"ID":            event.ID,
 		"Timestamp":     event.Timestamp.Format(time.RFC3339),
 		"SourceIP":      event.SourceIP,
@@ -664,19 +666,9 @@ func (n *Notifier) evaluateCondition(event *storage.Event, condition FilterCondi
 	case "not_contains":
 		return !bytes.Contains([]byte(fieldValue), []byte(condition.Value))
 	case "in":
-		for _, value := range condition.Values {
-			if fieldValue == value {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(condition.Values, fieldValue)
 	case "not_in":
-		for _, value := range condition.Values {
-			if fieldValue == value {
-				return false
-			}
-		}
-		return true
+		return !slices.Contains(condition.Values, fieldValue)
 	default:
 		return false // Unknown operator
 	}
@@ -799,9 +791,7 @@ func (n *Notifier) GetStats() *NotifierStats {
 	}
 
 	// Copy filter stats
-	for name, count := range n.stats.FilterStats {
-		statsCopy.FilterStats[name] = count
-	}
+	maps.Copy(statsCopy.FilterStats, n.stats.FilterStats)
 
 	return statsCopy
 }
@@ -832,4 +822,9 @@ func (n *Notifier) UpdateConfig(cfg config.Provider) error {
 		"filters", len(newConfig.FilterRules))
 
 	return nil
+}
+
+// Close closes the notifier and cleans up resources
+func (n *Notifier) Close() error {
+	return n.Stop()
 }

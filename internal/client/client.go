@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -59,7 +61,7 @@ type WebhookRequest struct {
 	URL         string            `json:"url"`
 	Method      string            `json:"method"`
 	Headers     map[string]string `json:"headers"`
-	Body        interface{}       `json:"body"`
+	Body        any               `json:"body"`
 	Timeout     time.Duration     `json:"timeout,omitempty"`
 	RetryCount  int               `json:"retry_count,omitempty"`
 	ContentType string            `json:"content_type,omitempty"`
@@ -187,7 +189,7 @@ func (c *HTTPClient) SendWebhook(ctx context.Context, request *WebhookRequest) (
 	var lastErr error
 
 	maxAttempts := c.config.MaxRetries + 1
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		if attempt > 0 {
 			c.mu.Lock()
 			c.stats.TotalRetries++
@@ -254,14 +256,7 @@ func (c *HTTPClient) validateRequest(request *WebhookRequest) error {
 
 	// Validate HTTP method
 	validMethods := []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
-	methodValid := false
-	for _, method := range validMethods {
-		if strings.ToUpper(request.Method) == method {
-			methodValid = true
-			break
-		}
-	}
-	if !methodValid {
+	if !slices.Contains(validMethods, strings.ToUpper(request.Method)) {
 		return fmt.Errorf("invalid HTTP method: %s", request.Method)
 	}
 
@@ -434,12 +429,8 @@ func (c *HTTPClient) GetStats() *ClientStats {
 	}
 
 	// Copy maps
-	for code, count := range c.stats.StatusCodes {
-		stats.StatusCodes[code] = count
-	}
-	for errType, count := range c.stats.ErrorTypes {
-		stats.ErrorTypes[errType] = count
-	}
+	maps.Copy(stats.StatusCodes, c.stats.StatusCodes)
+	maps.Copy(stats.ErrorTypes, c.stats.ErrorTypes)
 
 	return stats
 }

@@ -67,11 +67,11 @@ type EventTask struct {
 
 // EventResult represents the result of event processing
 type EventResult struct {
-	Success        bool                   `json:"success"`
-	Error          error                  `json:"error,omitempty"`
-	EventID        int64                  `json:"event_id,omitempty"`
-	EnrichedData   map[string]interface{} `json:"enriched_data,omitempty"`
-	ProcessingTime time.Duration          `json:"processing_time"`
+	Success        bool           `json:"success"`
+	Error          error          `json:"error,omitempty"`
+	EventID        int64          `json:"event_id,omitempty"`
+	EnrichedData   map[string]any `json:"enriched_data,omitempty"`
+	ProcessingTime time.Duration  `json:"processing_time"`
 }
 
 // ProcessorStats tracks event processor statistics
@@ -210,7 +210,7 @@ func (p *EventProcessor) ProcessEventSync(packet *types.SNMPPacket, sourceIP str
 }
 
 // worker processes events from the queue
-func (p *EventProcessor) worker(workerID int) {
+func (p *EventProcessor) worker(_ int) {
 	defer p.wg.Done()
 
 	for {
@@ -276,7 +276,7 @@ func (p *EventProcessor) worker(workerID int) {
 
 // processEventInternal performs the actual event processing
 func (p *EventProcessor) processEventInternal(packet *types.SNMPPacket, sourceIP string) *EventResult {
-	enrichedData := make(map[string]interface{})
+	enrichedData := make(map[string]any)
 
 	// Add basic metadata
 	enrichedData["source_ip"] = sourceIP
@@ -336,12 +336,12 @@ func (p *EventProcessor) processEventInternal(packet *types.SNMPPacket, sourceIP
 }
 
 // enrichEvent enriches an event with OID resolution and metadata
-func (p *EventProcessor) enrichEvent(packet *types.SNMPPacket, enrichedData map[string]interface{}) error {
+func (p *EventProcessor) enrichEvent(packet *types.SNMPPacket, enrichedData map[string]any) error {
 	// Enrich varbinds with OID names and descriptions
-	enrichedVarbinds := make([]map[string]interface{}, len(packet.Varbinds))
+	enrichedVarbinds := make([]map[string]any, len(packet.Varbinds))
 
 	for i, vb := range packet.Varbinds {
-		varbindData := map[string]interface{}{
+		varbindData := map[string]any{
 			"oid":   vb.OID,
 			"type":  vb.Type,
 			"value": vb.Value,

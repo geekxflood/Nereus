@@ -380,11 +380,11 @@ func (r *Resolver) ClearCache() {
 }
 
 // GetCacheInfo returns information about cached entries
-func (r *Resolver) GetCacheInfo() map[string]interface{} {
+func (r *Resolver) GetCacheInfo() map[string]any {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return map[string]interface{}{
+	return map[string]any{
 		"oid_cache_size":  len(r.oidCache),
 		"name_cache_size": len(r.nameCache),
 		"cache_enabled":   r.config.CacheEnabled,

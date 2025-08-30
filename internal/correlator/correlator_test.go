@@ -8,12 +8,12 @@ import (
 
 // mockConfigProvider implements the config.Provider interface for testing.
 type mockConfigProvider struct {
-	values map[string]interface{}
+	values map[string]any
 }
 
 func newMockConfigProvider() *mockConfigProvider {
 	return &mockConfigProvider{
-		values: map[string]interface{}{
+		values: map[string]any{
 			"correlator.enable_deduplication":   true,
 			"correlator.deduplication_window":   "5m",
 			"correlator.enable_correlation":     true,
@@ -119,7 +119,7 @@ func (m *mockConfigProvider) Validate() error {
 // mockStorage implements a minimal storage interface for testing
 type mockStorage struct{}
 
-func (m *mockStorage) StoreEvent(packet *types.SNMPPacket, sourceIP string, enrichedData map[string]interface{}) error {
+func (m *mockStorage) StoreEvent(packet *types.SNMPPacket, sourceIP string, enrichedData map[string]any) error {
 	return nil
 }
 
@@ -283,7 +283,7 @@ func TestProcessEvent(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	enrichedData := map[string]interface{}{
+	enrichedData := map[string]any{
 		"test_field": "test_value",
 	}
 
@@ -331,7 +331,7 @@ func TestDeduplication(t *testing.T) {
 		},
 	}
 
-	enrichedData := map[string]interface{}{}
+	enrichedData := map[string]any{}
 
 	// Process same event twice
 	_, err = correlator.ProcessEvent(packet, "192.168.1.100", enrichedData)
