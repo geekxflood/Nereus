@@ -13,8 +13,7 @@ import (
 )
 
 var (
-	configFile string
-	checkMIBs  bool
+	checkMIBs bool
 )
 
 // validateCmd represents the validate command
@@ -36,13 +35,12 @@ var validateCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(validateCmd)
 
-	validateCmd.Flags().StringVarP(&configFile, "config", "c", "", "Configuration file path")
 	validateCmd.Flags().BoolVar(&checkMIBs, "check-mibs", false, "Also validate MIB file accessibility")
 }
 
 func validateConfig(cmd *cobra.Command, args []string) error {
 	// Determine config file path
-	configPath := configFile
+	configPath := cfgFile
 	if configPath == "" {
 		// Try default locations
 		defaultPaths := []string{
@@ -144,9 +142,4 @@ func validateMIBFiles(manager config.Provider) error {
 
 	fmt.Printf("  Found %d MIB files in %s\n", mibCount, mibPath)
 	return nil
-}
-
-func init() {
-	rootCmd.AddCommand(validateCmd)
-	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "Configuration file path")
 }

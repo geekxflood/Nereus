@@ -115,9 +115,3 @@ logging:
 	fmt.Printf("Configuration file generated: %s\n", outputFile)
 	return nil
 }
-
-func init() {
-	rootCmd.AddCommand(generateCmd)
-	generateCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file path (default: stdout)")
-	generateCmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite existing file")
-}
