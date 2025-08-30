@@ -20,8 +20,9 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "nereus",
-	Short: "Advanced SNMP trap alerting system",
+	Use:     "nereus",
+	Version: version,
+	Short:   "Advanced SNMP trap alerting system",
 	Long: `Nereus is an advanced SNMP trap alerting system designed to monitor, parse,
 and manage alerts with intelligent event correlation and notification capabilities.`,
 	Example: `# Start the SNMP trap listener with default config
@@ -44,21 +45,6 @@ func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
-	}
-}
-
-func init() {
-	// Global flags
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "Configuration file path")
-	rootCmd.Flags().BoolP("version", "v", false, "Show version information")
-
-	// Handle version flag
-	rootCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
-			fmt.Printf("nereus version %s\n", version)
-			os.Exit(0)
-		}
-		return nil
 	}
 }
 
@@ -146,4 +132,18 @@ func loadConfig() (config.Manager, error) {
 	}
 
 	return manager, nil
+}
+
+func init() {
+	// Global flags
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "Configuration file path")
+
+	// Handle version flag
+	rootCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if versionFlag, _ := cmd.Flags().GetBool("version"); versionFlag {
+			fmt.Printf("nereus version %s\n", version)
+			os.Exit(0)
+		}
+		return nil
+	}
 }
