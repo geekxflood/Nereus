@@ -241,7 +241,7 @@ func (l *Loader) loadFile(path string) error {
 	// Create MIB file entry
 	mibFile := &MIBFile{
 		Path:       path,
-		Name:       l.extractMIBName(path, content),
+		Name:       l.extractMIBName(path),
 		Content:    content,
 		Size:       info.Size(),
 		ModTime:    info.ModTime(),
@@ -277,7 +277,7 @@ func (l *Loader) loadFile(path string) error {
 }
 
 // extractMIBName extracts the MIB name from file path or content
-func (l *Loader) extractMIBName(path string, content []byte) string {
+func (l *Loader) extractMIBName(path string) string {
 	// Try to extract from filename first
 	base := filepath.Base(path)
 	ext := filepath.Ext(base)

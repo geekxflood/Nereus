@@ -19,6 +19,7 @@ import (
 	"github.com/geekxflood/nereus/internal/events"
 	"github.com/geekxflood/nereus/internal/listener"
 	"github.com/geekxflood/nereus/internal/loader"
+	"github.com/geekxflood/nereus/internal/metrics"
 	"github.com/geekxflood/nereus/internal/mib"
 	"github.com/geekxflood/nereus/internal/notifier"
 	"github.com/geekxflood/nereus/internal/resolver"
@@ -86,15 +87,16 @@ type Application struct {
 	configProvider config.Provider
 
 	// Core components
-	mibLoader  *loader.Loader
-	mibParser  *mib.Parser
-	resolver   *resolver.Resolver
-	listener   ListenerInterface
-	storage    *storage.Storage
-	correlator *correlator.Correlator
-	processor  *events.EventProcessor
-	httpClient *client.HTTPClient
-	notifier   *notifier.Notifier
+	mibLoader      *loader.Loader
+	mibParser      *mib.Parser
+	resolver       *resolver.Resolver
+	listener       ListenerInterface
+	storage        *storage.Storage
+	correlator     *correlator.Correlator
+	processor      *events.EventProcessor
+	httpClient     *client.HTTPClient
+	notifier       *notifier.Notifier
+	metricsManager *metrics.MetricsManager
 
 	// Logging
 	logger        logging.Logger
@@ -173,6 +175,13 @@ func NewApplication(configManager config.Manager) (*Application, error) {
 	// Add application component context
 	appLogger := logger.With("component", "app")
 
+	// Initialize metrics manager
+	metricsManager, err := metrics.NewMetricsManager(configProvider, logger)
+	if err != nil {
+		cleanup.Close()
+		return nil, fmt.Errorf("failed to initialize metrics manager: %w", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	app := &Application{
@@ -180,6 +189,7 @@ func NewApplication(configManager config.Manager) (*Application, error) {
 		configProvider: configProvider,
 		logger:         appLogger,
 		loggerCleanup:  cleanup,
+		metricsManager: metricsManager,
 		ctx:            ctx,
 		cancel:         cancel,
 		stats: &AppStats{
@@ -199,6 +209,14 @@ func NewApplication(configManager config.Manager) (*Application, error) {
 // Initialize initializes all application components
 func (a *Application) Initialize() error {
 	a.logger.Info("Initializing application components")
+
+	// Start metrics manager first
+	if err := a.metricsManager.Start(); err != nil {
+		return fmt.Errorf("failed to start metrics manager: %w", err)
+	}
+
+	// Set initial component health
+	a.metricsManager.SetComponentHealth("app", true)
 
 	// Initialize MIB loader
 	if err := a.initializeMIBLoader(); err != nil {
@@ -328,6 +346,13 @@ func (a *Application) Shutdown() error {
 		a.logger.Info("Shutting down storage")
 		if err := a.storage.Close(); err != nil {
 			shutdownErrors = append(shutdownErrors, fmt.Errorf("storage shutdown error: %w", err))
+		}
+	}
+
+	if a.metricsManager != nil {
+		a.logger.Info("Shutting down metrics manager")
+		if err := a.metricsManager.Stop(); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("metrics manager shutdown error: %w", err))
 		}
 	}
 
@@ -549,6 +574,11 @@ func (il *IntegratedListener) trapProcessor() {
 func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
 	startTime := time.Now()
 
+	// Update metrics
+	trapMetrics := a.metricsManager.GetTrapMetrics()
+	trapMetrics.TrapsReceived.Inc()
+	trapMetrics.TrapsPerSource.WithLabelValues(sourceIP).Inc()
+
 	a.mu.Lock()
 	a.stats.TotalTrapsReceived++
 	a.mu.Unlock()
@@ -564,6 +594,10 @@ func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
 	processingTime := time.Since(startTime)
 
 	if err != nil {
+		// Update metrics
+		trapMetrics.TrapsFailed.Inc()
+		trapMetrics.ProcessingTime.Observe(processingTime.Seconds())
+
 		a.mu.Lock()
 		a.stats.TotalTrapsFailed++
 		a.stats.LastError = err.Error()
@@ -599,6 +633,15 @@ func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
 			"processing_time", processingTime)
 		return
 	}
+
+	// Update metrics for successful processing
+	trapMetrics.TrapsProcessed.Inc()
+	trapMetrics.ProcessingTime.Observe(processingTime.Seconds())
+
+	// Add trap type metrics using PDU type for now
+	// TODO: Extract actual trap OID from varbinds when trap parsing is implemented
+	pduTypeStr := fmt.Sprintf("pdu_%d", packet.PDUType)
+	trapMetrics.TrapsByType.WithLabelValues(pduTypeStr, "snmp_trap").Inc()
 
 	a.mu.Lock()
 	a.stats.TotalTrapsProcessed++
@@ -721,4 +764,9 @@ func (a *Application) IsHealthy() bool {
 // GetComponentLogger returns a logger for a specific component
 func (a *Application) GetComponentLogger(component string) logging.Logger {
 	return a.logger.With("component", component)
+}
+
+// GetMetricsManager returns the metrics manager
+func (a *Application) GetMetricsManager() *metrics.MetricsManager {
+	return a.metricsManager
 }

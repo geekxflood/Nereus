@@ -1,8 +1,6 @@
 package loader
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -15,12 +13,12 @@ type mockConfigProvider struct {
 func newMockConfigProvider() *mockConfigProvider {
 	return &mockConfigProvider{
 		values: map[string]interface{}{
-			"mib.directories":      []string{"./testdata"},
-			"mib.file_extensions":  []string{".mib", ".txt"},
-			"mib.max_file_size":    1024 * 1024,
+			"mib.directories":       []string{"./testdata"},
+			"mib.file_extensions":   []string{".mib", ".txt"},
+			"mib.max_file_size":     1024 * 1024,
 			"mib.enable_hot_reload": false,
-			"mib.cache_enabled":    true,
-			"mib.cache_expiry":     "1h",
+			"mib.cache_enabled":     true,
+			"mib.cache_expiry":      "1h",
 		},
 	}
 }
@@ -120,24 +118,24 @@ func (m *mockConfigProvider) Validate() error {
 
 func TestNewLoader(t *testing.T) {
 	cfg := newMockConfigProvider()
-	
+
 	loader, err := NewLoader(cfg)
 	if err != nil {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
-	
+
 	if loader == nil {
 		t.Fatal("Loader is nil")
 	}
-	
+
 	if loader.config == nil {
 		t.Error("Config not set")
 	}
-	
+
 	if loader.files == nil {
 		t.Error("Files map not initialized")
 	}
-	
+
 	if loader.stats == nil {
 		t.Error("Stats not initialized")
 	}
@@ -148,7 +146,7 @@ func TestNewLoaderNilConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for nil config, got nil")
 	}
-	
+
 	expectedMsg := "configuration provider cannot be nil"
 	if err.Error() != expectedMsg {
 		t.Errorf("Expected error message '%s', got '%s'", expectedMsg, err.Error())
@@ -157,23 +155,23 @@ func TestNewLoaderNilConfig(t *testing.T) {
 
 func TestDefaultLoaderConfig(t *testing.T) {
 	config := DefaultLoaderConfig()
-	
+
 	if config == nil {
 		t.Fatal("Config is nil")
 	}
-	
+
 	if len(config.MIBDirectories) == 0 {
 		t.Error("No default MIB directories")
 	}
-	
+
 	if len(config.FileExtensions) == 0 {
 		t.Error("No default file extensions")
 	}
-	
+
 	if config.MaxFileSize <= 0 {
 		t.Error("Invalid max file size")
 	}
-	
+
 	if len(config.RequiredMIBs) == 0 {
 		t.Error("No required MIBs specified")
 	}
@@ -185,19 +183,19 @@ func TestValidateRequiredMIBs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
-	
+
 	// Test with no files loaded
 	err = loader.validateRequiredMIBs()
 	if err == nil {
 		t.Error("Expected error for missing required MIBs")
 	}
-	
+
 	// Add a required MIB
 	loader.files["test.mib"] = &MIBFile{
 		Name:     "SNMPv2-SMI",
 		ParsedOK: true,
 	}
-	
+
 	// Should still fail as not all required MIBs are present
 	err = loader.validateRequiredMIBs()
 	if err == nil {
@@ -211,7 +209,7 @@ func TestHasValidExtension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
-	
+
 	testCases := []struct {
 		path     string
 		expected bool
@@ -224,7 +222,7 @@ func TestHasValidExtension(t *testing.T) {
 		{"test", false},
 		{"test.bak", false},
 	}
-	
+
 	for _, tc := range testCases {
 		result := loader.hasValidExtension(tc.path)
 		if result != tc.expected {
@@ -239,7 +237,7 @@ func TestShouldIgnoreFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
-	
+
 	testCases := []struct {
 		path     string
 		expected bool
@@ -251,7 +249,7 @@ func TestShouldIgnoreFile(t *testing.T) {
 		{"normal.mib", false},
 		{"test.txt", false},
 	}
-	
+
 	for _, tc := range testCases {
 		result := loader.shouldIgnoreFile(tc.path)
 		if result != tc.expected {
@@ -266,7 +264,7 @@ func TestExtractMIBName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
-	
+
 	testCases := []struct {
 		path     string
 		content  []byte
@@ -277,9 +275,9 @@ func TestExtractMIBName(t *testing.T) {
 		{"/path/to/test-mib.txt", []byte{}, "TEST"},
 		{"/path/to/enterprise_mib.my", []byte{}, "ENTERPRISE"},
 	}
-	
+
 	for _, tc := range testCases {
-		result := loader.extractMIBName(tc.path, tc.content)
+		result := loader.extractMIBName(tc.path)
 		if result != tc.expected {
 			t.Errorf("extractMIBName(%s) = %s, expected %s", tc.path, result, tc.expected)
 		}
@@ -292,7 +290,7 @@ func TestValidateMIBContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
-	
+
 	validMIB := []byte(`
 TEST-MIB DEFINITIONS ::= BEGIN
 IMPORTS
@@ -307,17 +305,17 @@ testMIB MODULE-IDENTITY
 
 END
 `)
-	
+
 	invalidMIB := []byte(`
 This is not a valid MIB file
 `)
-	
+
 	// Test valid MIB
 	err = loader.validateMIBContent(validMIB)
 	if err != nil {
 		t.Errorf("Valid MIB failed validation: %v", err)
 	}
-	
+
 	// Test invalid MIB
 	err = loader.validateMIBContent(invalidMIB)
 	if err == nil {
@@ -331,17 +329,17 @@ func TestGetStats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
-	
+
 	stats := loader.GetStats()
 	if stats == nil {
 		t.Fatal("Stats is nil")
 	}
-	
+
 	// Check that stats structure is properly initialized
 	if stats.FilesLoaded < 0 {
 		t.Error("Invalid FilesLoaded count")
 	}
-	
+
 	if stats.ParseErrors < 0 {
 		t.Error("Invalid ParseErrors count")
 	}

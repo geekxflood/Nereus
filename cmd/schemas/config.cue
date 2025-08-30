@@ -426,10 +426,19 @@ package schemas
 	enabled?: bool | *true
 
 	// Address to bind metrics server
-	bind_address?: string | *"0.0.0.0:9090"
+	listen_address?: string | *":9090"
 
 	// Metrics endpoint path
-	path?: string | *"/metrics"
+	metrics_path?: string | *"/metrics"
+
+	// Health check endpoint path
+	health_path?: string | *"/health"
+
+	// Readiness check endpoint path
+	ready_path?: string | *"/ready"
+
+	// System metrics update interval
+	update_interval?: string | *"30s"
 
 	// Metrics namespace
 	namespace?: string | *"nereus"
