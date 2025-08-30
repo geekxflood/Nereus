@@ -32,6 +32,9 @@ package schemas
 	// Metrics configuration
 	metrics?: #Metrics
 
+	// Hot reload configuration
+	reload?: #Reload
+
 	// Legacy configurations (for backward compatibility)
 	server?: #Server
 	mibs?:   #MIBs
@@ -442,4 +445,31 @@ package schemas
 
 	// Metrics namespace
 	namespace?: string | *"nereus"
+}
+
+// Reload defines the hot reload configuration
+#Reload: {
+	// Enable hot reload functionality
+	enabled?: bool | *true
+
+	// Watch configuration file for changes
+	watch_config_file?: bool | *true
+
+	// Watch MIB directories for changes
+	watch_mib_directories?: bool | *true
+
+	// Delay before processing reload events (debounce)
+	reload_delay?: string | *"2s"
+
+	// Maximum number of reload attempts
+	max_reload_attempts?: int & >=1 | *3
+
+	// Timeout for reload operations
+	reload_timeout?: string | *"30s"
+
+	// Preserve application state during reload
+	preserve_state?: bool | *true
+
+	// Validate configuration before applying reload
+	validate_before_reload?: bool | *true
 }

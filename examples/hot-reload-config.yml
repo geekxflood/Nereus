@@ -1,0 +1,218 @@
+# Example configuration for Nereus SNMP Trap Listener with Hot Reload enabled
+# This configuration demonstrates how to enable and configure hot reload functionality
+
+# Application configuration
+app:
+  name: "nereus-snmp-listener"
+  version: "1.0.0"
+  log_level: "info"
+  shutdown_timeout: "30s"
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  component: "nereus"
+  stdout: true
+
+# Hot reload configuration
+reload:
+  # Enable hot reload functionality
+  enabled: true
+  
+  # Watch the configuration file for changes
+  watch_config_file: true
+  
+  # Watch MIB directories for changes
+  watch_mib_directories: true
+  
+  # Delay before processing reload events (debounce multiple file changes)
+  reload_delay: "2s"
+  
+  # Maximum number of reload attempts on failure
+  max_reload_attempts: 3
+  
+  # Timeout for reload operations
+  reload_timeout: "30s"
+  
+  # Preserve application state during reload (recommended)
+  preserve_state: true
+  
+  # Validate configuration before applying reload
+  validate_before_reload: true
+
+# Metrics configuration
+metrics:
+  enabled: true
+  listen_address: ":9090"
+  metrics_path: "/metrics"
+  health_path: "/health"
+  ready_path: "/ready"
+  update_interval: "30s"
+  namespace: "nereus"
+
+# SNMP Listener configuration
+listener:
+  bind_address: "0.0.0.0:162"
+  max_packet_size: 65507
+  read_timeout: "30s"
+  workers: 4
+  buffer_size: 1000
+
+# Storage configuration
+storage:
+  type: "sqlite"
+  connection_string: "./data/nereus.db"
+  max_connections: 10
+  retention_days: 30
+  cleanup_interval: "1h"
+
+# Event correlation configuration
+correlator:
+  enabled: true
+  deduplication_window: "5m"
+  correlation_window: "10m"
+  max_groups: 1000
+  flapping_threshold: 5
+  flapping_window: "2m"
+
+# Notification configuration
+notifier:
+  enabled: true
+  workers: 5
+  queue_size: 1000
+  retry_attempts: 3
+  retry_delay: "5s"
+  timeout: "30s"
+
+# MIB configuration (supports hot reload)
+mib:
+  directories:
+    - "./mibs"
+    - "/usr/share/snmp/mibs"
+  file_extensions:
+    - ".mib"
+    - ".txt"
+  max_file_size: "10MB"
+  enable_hot_reload: true  # Enable MIB hot reload
+  cache_enabled: true
+  cache_expiry: "1h"
+
+# OID resolver configuration
+resolver:
+  cache_size: 10000
+  cache_ttl: "1h"
+  enable_reverse_lookup: true
+
+# HTTP client configuration
+client:
+  timeout: "30s"
+  max_idle_conns: 100
+  max_idle_conns_per_host: 10
+  idle_conn_timeout: "90s"
+  tls_handshake_timeout: "10s"
+  expect_continue_timeout: "1s"
+
+# Health check configuration
+health_check:
+  enabled: true
+  interval: "30s"
+  timeout: "5s"
+
+# Example webhook configurations (supports hot reload)
+webhooks:
+  - name: "slack-alerts"
+    url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+    method: "POST"
+    timeout: "30s"
+    retry_count: 3
+    retry_delay: "5s"
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "text": "SNMP Trap Alert - Hot Reload Enabled",
+        "attachments": [
+          {
+            "color": "warning",
+            "fields": [
+              {
+                "title": "Source IP",
+                "value": "{{ .SourceIP }}",
+                "short": true
+              },
+              {
+                "title": "Community",
+                "value": "{{ .Community }}",
+                "short": true
+              },
+              {
+                "title": "Timestamp",
+                "value": "{{ .Timestamp }}",
+                "short": true
+              },
+              {
+                "title": "Hot Reload",
+                "value": "Configuration can be updated without restart",
+                "short": false
+              }
+            ]
+          }
+        ]
+      }
+    filters:
+      - field: "source_ip"
+        operator: "matches"
+        value: "192\\.168\\..+"
+
+  - name: "email-notifications"
+    url: "https://api.sendgrid.com/v3/mail/send"
+    method: "POST"
+    timeout: "30s"
+    retry_count: 2
+    retry_delay: "10s"
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer YOUR_SENDGRID_API_KEY"
+    template: |
+      {
+        "personalizations": [
+          {
+            "to": [{"email": "admin@example.com"}],
+            "subject": "SNMP Trap Alert from {{ .SourceIP }}"
+          }
+        ],
+        "from": {"email": "nereus@example.com"},
+        "content": [
+          {
+            "type": "text/html",
+            "value": "<h2>SNMP Trap Alert</h2><p><strong>Source:</strong> {{ .SourceIP }}</p><p><strong>Community:</strong> {{ .Community }}</p><p><strong>Time:</strong> {{ .Timestamp }}</p><p><em>This alert system supports hot reload - configuration changes are applied automatically.</em></p>"
+          }
+        ]
+      }
+    filters:
+      - field: "severity"
+        operator: "in"
+        value: "critical,high"
+
+# Hot Reload Usage Instructions:
+#
+# 1. Start Nereus with this configuration file
+# 2. Make changes to this file while Nereus is running
+# 3. Changes will be automatically detected and applied within 2 seconds
+# 4. Check the logs to see reload events
+# 5. Add/remove/modify MIB files in the configured directories
+# 6. MIB changes will also be automatically reloaded
+# 7. Use the metrics endpoint to monitor reload statistics:
+#    curl http://localhost:9090/metrics | grep reload
+#
+# Manual reload triggers:
+# - Send SIGHUP signal to the process for full reload
+# - Use the reload API endpoint (if implemented)
+# - Modify watched files to trigger automatic reload
+#
+# Reload events are logged with structured data:
+# - reload_type: config, mib, webhook, or all
+# - reload_source: file path or manual trigger
+# - reload_duration: time taken to complete reload
+# - reload_success: whether the reload was successful

@@ -500,9 +500,37 @@ func (l *Loader) GetStats() *LoaderStats {
 }
 
 // Reload forces a reload of all MIB files
-func (l *Loader) Reload() error {
+func (l *Loader) Reload(configProvider config.Provider) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	// Update configuration if provided
+	if configProvider != nil {
+		// Reload configuration
+		if dirs, err := configProvider.GetStringSlice("mib.directories"); err == nil {
+			l.config.MIBDirectories = dirs
+		}
+
+		if exts, err := configProvider.GetStringSlice("mib.file_extensions"); err == nil {
+			l.config.FileExtensions = exts
+		}
+
+		if size, err := configProvider.GetInt("mib.max_file_size", int(l.config.MaxFileSize)); err == nil {
+			l.config.MaxFileSize = int64(size)
+		}
+
+		if reload, err := configProvider.GetBool("mib.enable_hot_reload", l.config.EnableHotReload); err == nil {
+			l.config.EnableHotReload = reload
+		}
+
+		if cache, err := configProvider.GetBool("mib.cache_enabled", l.config.CacheEnabled); err == nil {
+			l.config.CacheEnabled = cache
+		}
+
+		if expiry, err := configProvider.GetDuration("mib.cache_expiry", l.config.CacheExpiry); err == nil {
+			l.config.CacheExpiry = expiry
+		}
+	}
 
 	// Clear existing files
 	l.files = make(map[string]*MIBFile)
@@ -511,6 +539,23 @@ func (l *Loader) Reload() error {
 
 	// Reload all files
 	return l.LoadAll()
+}
+
+// GetReloadStats returns reload statistics for the loader
+func (l *Loader) GetReloadStats() map[string]any {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	return map[string]any{
+		"files_loaded":        len(l.files),
+		"total_size":          l.stats.TotalSize,
+		"files_watched":       l.stats.FilesWatched,
+		"reload_events":       l.stats.ReloadEvents,
+		"directories_scanned": l.stats.DirectoriesScanned,
+		"cache_hits":          l.stats.CacheHits,
+		"cache_misses":        l.stats.CacheMisses,
+		"parse_errors":        l.stats.ParseErrors,
+	}
 }
 
 // Close shuts down the loader and releases resources

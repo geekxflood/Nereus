@@ -22,6 +22,7 @@ import (
 	"github.com/geekxflood/nereus/internal/metrics"
 	"github.com/geekxflood/nereus/internal/mib"
 	"github.com/geekxflood/nereus/internal/notifier"
+	"github.com/geekxflood/nereus/internal/reload"
 	"github.com/geekxflood/nereus/internal/resolver"
 	"github.com/geekxflood/nereus/internal/storage"
 	"github.com/geekxflood/nereus/internal/types"
@@ -97,6 +98,7 @@ type Application struct {
 	httpClient     *client.HTTPClient
 	notifier       *notifier.Notifier
 	metricsManager *metrics.MetricsManager
+	reloadManager  *reload.ReloadManager
 
 	// Logging
 	logger        logging.Logger
@@ -182,6 +184,13 @@ func NewApplication(configManager config.Manager) (*Application, error) {
 		return nil, fmt.Errorf("failed to initialize metrics manager: %w", err)
 	}
 
+	// Initialize reload manager
+	reloadManager, err := reload.NewReloadManager(configManager, logger)
+	if err != nil {
+		cleanup.Close()
+		return nil, fmt.Errorf("failed to initialize reload manager: %w", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	app := &Application{
@@ -190,6 +199,7 @@ func NewApplication(configManager config.Manager) (*Application, error) {
 		logger:         appLogger,
 		loggerCleanup:  cleanup,
 		metricsManager: metricsManager,
+		reloadManager:  reloadManager,
 		ctx:            ctx,
 		cancel:         cancel,
 		stats: &AppStats{
@@ -218,10 +228,18 @@ func (a *Application) Initialize() error {
 	// Set initial component health
 	a.metricsManager.SetComponentHealth("app", true)
 
+	// Start reload manager
+	if err := a.reloadManager.Start(); err != nil {
+		return fmt.Errorf("failed to start reload manager: %w", err)
+	}
+
 	// Initialize MIB loader
 	if err := a.initializeMIBLoader(); err != nil {
 		return fmt.Errorf("failed to initialize MIB loader: %w", err)
 	}
+
+	// Register MIB loader for hot reload
+	a.reloadManager.RegisterComponent("mib_loader", a.mibLoader)
 
 	// Initialize MIB parser
 	if err := a.initializeMIBParser(); err != nil {
@@ -346,6 +364,13 @@ func (a *Application) Shutdown() error {
 		a.logger.Info("Shutting down storage")
 		if err := a.storage.Close(); err != nil {
 			shutdownErrors = append(shutdownErrors, fmt.Errorf("storage shutdown error: %w", err))
+		}
+	}
+
+	if a.reloadManager != nil {
+		a.logger.Info("Shutting down reload manager")
+		if err := a.reloadManager.Stop(); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("reload manager shutdown error: %w", err))
 		}
 	}
 
@@ -769,4 +794,9 @@ func (a *Application) GetComponentLogger(component string) logging.Logger {
 // GetMetricsManager returns the metrics manager
 func (a *Application) GetMetricsManager() *metrics.MetricsManager {
 	return a.metricsManager
+}
+
+// GetReloadManager returns the reload manager
+func (a *Application) GetReloadManager() *reload.ReloadManager {
+	return a.reloadManager
 }
