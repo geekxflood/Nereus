@@ -334,7 +334,7 @@ func TestDeduplication(t *testing.T) {
 	enrichedData := map[string]interface{}{}
 
 	// Process same event twice
-	result1, err := correlator.ProcessEvent(packet, "192.168.1.100", enrichedData)
+	_, err = correlator.ProcessEvent(packet, "192.168.1.100", enrichedData)
 	if err != nil {
 		t.Errorf("Failed to process first event: %v", err)
 	}

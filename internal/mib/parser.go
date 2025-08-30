@@ -13,31 +13,31 @@ import (
 
 // OIDNode represents a node in the OID tree
 type OIDNode struct {
-	OID         string            `json:"oid"`
-	Name        string            `json:"name"`
-	Description string            `json:"description,omitempty"`
-	Syntax      string            `json:"syntax,omitempty"`
-	Access      string            `json:"access,omitempty"`
-	Status      string            `json:"status,omitempty"`
-	Parent      *OIDNode          `json:"-"` // Don't serialize to avoid cycles
+	OID         string              `json:"oid"`
+	Name        string              `json:"name"`
+	Description string              `json:"description,omitempty"`
+	Syntax      string              `json:"syntax,omitempty"`
+	Access      string              `json:"access,omitempty"`
+	Status      string              `json:"status,omitempty"`
+	Parent      *OIDNode            `json:"-"` // Don't serialize to avoid cycles
 	Children    map[string]*OIDNode `json:"children,omitempty"`
-	MIBName     string            `json:"mib_name"`
-	IsTable     bool              `json:"is_table,omitempty"`
-	IsEntry     bool              `json:"is_entry,omitempty"`
-	Index       []string          `json:"index,omitempty"`
+	MIBName     string              `json:"mib_name"`
+	IsTable     bool                `json:"is_table,omitempty"`
+	IsEntry     bool                `json:"is_entry,omitempty"`
+	Index       []string            `json:"index,omitempty"`
 }
 
 // MIBInfo represents parsed MIB information
 type MIBInfo struct {
-	Name         string            `json:"name"`
-	Description  string            `json:"description,omitempty"`
-	Organization string            `json:"organization,omitempty"`
-	ContactInfo  string            `json:"contact_info,omitempty"`
-	LastUpdated  string            `json:"last_updated,omitempty"`
-	Revision     string            `json:"revision,omitempty"`
-	Imports      map[string]string `json:"imports,omitempty"`
+	Name         string              `json:"name"`
+	Description  string              `json:"description,omitempty"`
+	Organization string              `json:"organization,omitempty"`
+	ContactInfo  string              `json:"contact_info,omitempty"`
+	LastUpdated  string              `json:"last_updated,omitempty"`
+	Revision     string              `json:"revision,omitempty"`
+	Imports      map[string]string   `json:"imports,omitempty"`
 	Objects      map[string]*OIDNode `json:"objects,omitempty"`
-	FilePath     string            `json:"file_path"`
+	FilePath     string              `json:"file_path"`
 }
 
 // Parser handles MIB parsing and OID tree construction
@@ -47,19 +47,20 @@ type Parser struct {
 	mibs      map[string]*MIBInfo
 	nameToOID map[string]string
 	oidToName map[string]string
+	nodes     map[string]*OIDNode
 	mu        sync.RWMutex
 	stats     *ParserStats
 }
 
 // ParserStats tracks parser statistics
 type ParserStats struct {
-	MIBsParsed     int `json:"mibs_parsed"`
-	ObjectsParsed  int `json:"objects_parsed"`
-	ParseErrors    int `json:"parse_errors"`
-	TreeDepth      int `json:"tree_depth"`
-	TotalNodes     int `json:"total_nodes"`
-	TablesFound    int `json:"tables_found"`
-	EntriesFound   int `json:"entries_found"`
+	MIBsParsed    int `json:"mibs_parsed"`
+	ObjectsParsed int `json:"objects_parsed"`
+	ParseErrors   int `json:"parse_errors"`
+	TreeDepth     int `json:"tree_depth"`
+	TotalNodes    int `json:"total_nodes"`
+	TablesFound   int `json:"tables_found"`
+	EntriesFound  int `json:"entries_found"`
 }
 
 // Regular expressions for MIB parsing
@@ -83,6 +84,7 @@ func NewParser(l *loader.Loader) *Parser {
 		mibs:      make(map[string]*MIBInfo),
 		nameToOID: make(map[string]string),
 		oidToName: make(map[string]string),
+		nodes:     make(map[string]*OIDNode),
 		stats:     &ParserStats{},
 	}
 }
@@ -255,7 +257,7 @@ func (p *Parser) parseImports(content string, mibInfo *MIBInfo) {
 // parseMIBMetadata extracts metadata from MIB content
 func (p *Parser) parseMIBMetadata(content string, mibInfo *MIBInfo) {
 	// Extract organization
-	if match := regexp.MustCompile(`ORGANIZATION\s+"([^"]*)"`)FindStringSubmatch(content); len(match) > 1 {
+	if match := regexp.MustCompile(`ORGANIZATION\s+"([^"]*)"`).FindStringSubmatch(content); len(match) > 1 {
 		mibInfo.Organization = match[1]
 	}
 
@@ -514,4 +516,33 @@ func (p *Parser) GetNodeInfo(oid string) (*OIDNode, bool) {
 	return p.FindNode(oid)
 }
 
+// parseObjectDefinition parses an object definition from MIB content
+func (p *Parser) parseObjectDefinition(content, objectName string, mibInfo *MIBInfo) error {
+	// This is a simplified implementation
+	// In a full implementation, this would parse the complete object definition
+	// including SYNTAX, ACCESS, STATUS, DESCRIPTION, etc.
 
+	// For now, we'll just create a basic OID node
+	node := &OIDNode{
+		Name:        objectName,
+		Description: fmt.Sprintf("Object definition for %s", objectName),
+		MIBName:     mibInfo.Name,
+	}
+
+	// Try to extract OID from the definition
+	oidPattern := regexp.MustCompile(objectName + `\s+OBJECT\s+IDENTIFIER\s*::=\s*\{\s*([^}]+)\s*\}`)
+	if match := oidPattern.FindStringSubmatch(content); len(match) > 1 {
+		// Parse the OID path (simplified)
+		oidPath := strings.TrimSpace(match[1])
+		// This would need more sophisticated parsing in a real implementation
+		node.OID = oidPath
+	}
+
+	// Add to parser's node registry
+	if p.nodes == nil {
+		p.nodes = make(map[string]*OIDNode)
+	}
+	p.nodes[objectName] = node
+
+	return nil
+}
