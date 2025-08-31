@@ -77,13 +77,13 @@ go build -ldflags "-X main.version=$(git describe --tags)" -o nereus ./main.go
 
 ## 📖 Documentation
 
-| Topic             | Description                        | Link                                       |
-| ----------------- | ---------------------------------- | ------------------------------------------ |
-| **Configuration** | Complete configuration reference   | [docs/configuration/](docs/configuration/) |
-| **Architecture**  | System design and components       | [docs/architecture/](docs/architecture/)   |
-| **Deployment**    | Production deployment guides       | [docs/deployment/](docs/deployment/)       |
-| **Development**   | Contributing and development setup | [docs/development/](docs/development/)     |
-| **API Reference** | REST API and metrics endpoints     | [docs/api/](docs/api/)                     |
+| Topic             | Description                        | Link                                         |
+| ----------------- | ---------------------------------- | -------------------------------------------- |
+| **Configuration** | Complete configuration reference   | [docs/configuration/](docs/configuration.md) |
+| **Architecture**  | System design and components       | [docs/architecture/](docs/architecture)      |
+| **Deployment**    | Production deployment guides       | [docs/deployment/](docs/deployment.md)       |
+| **Development**   | Contributing and development setup | [docs/development/](docs/development.md)     |
+| **API Reference** | REST API and metrics endpoints     | [docs/api/](docs/api.md)                     |
 
 ## ⚡ Quick Configuration
 
@@ -277,7 +277,7 @@ Nereus exposes comprehensive metrics on port 9090:
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](docs/development/CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guide](docs/CONTRIBUTING.md) for details.
 
 ### Development Setup
 
