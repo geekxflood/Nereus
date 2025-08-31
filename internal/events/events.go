@@ -1,4 +1,6 @@
-// Package events provides event processing and enrichment functionality.
+// Package events provides SNMP trap event processing, enrichment, and orchestration functionality.
+// It coordinates between MIB resolution, event correlation, and storage to create a complete
+// event processing pipeline with worker-based concurrent processing.
 package events
 
 import (
