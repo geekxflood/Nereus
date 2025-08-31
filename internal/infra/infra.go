@@ -4,7 +4,6 @@ package infra
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -17,7 +16,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/geekxflood/common/config"
 	"github.com/geekxflood/common/logging"
-	"github.com/geekxflood/nereus/internal/client"
 )
 
 // InfraConfig holds consolidated configuration for infrastructure components
@@ -98,7 +96,25 @@ func DefaultInfraConfig() *InfraConfig {
 	}
 }
 
-// Use client package types for webhook requests and responses
+// WebhookRequest represents a webhook HTTP request
+type WebhookRequest struct {
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers"`
+	Body    []byte            `json:"body"`
+	Timeout time.Duration     `json:"timeout"`
+}
+
+// WebhookResponse represents a webhook HTTP response
+type WebhookResponse struct {
+	StatusCode    int               `json:"status_code"`
+	Headers       map[string]string `json:"headers"`
+	Body          []byte            `json:"body"`
+	ContentLength int64             `json:"content_length"`
+	Success       bool              `json:"success"`
+	Duration      time.Duration     `json:"duration"`
+	Error         string            `json:"error,omitempty"`
+}
 
 // RetryableFunc represents a function that can be retried
 type RetryableFunc func(ctx context.Context, attempt int) error
@@ -374,7 +390,7 @@ func (m *Manager) initializeHTTPClient() error {
 }
 
 // SendWebhook sends a webhook request with retry logic
-func (m *Manager) SendWebhook(ctx context.Context, request *client.WebhookRequest) (*client.WebhookResponse, error) {
+func (m *Manager) SendWebhook(ctx context.Context, request *WebhookRequest) (*WebhookResponse, error) {
 	m.mu.Lock()
 	m.stats.RequestsSent++
 	m.mu.Unlock()
@@ -388,7 +404,7 @@ func (m *Manager) SendWebhook(ctx context.Context, request *client.WebhookReques
 	}
 
 	// Use retry mechanism
-	var response *client.WebhookResponse
+	var response *WebhookResponse
 	var lastErr error
 
 	retryFunc := func(ctx context.Context, attempt int) error {
@@ -423,14 +439,14 @@ func (m *Manager) SendWebhook(ctx context.Context, request *client.WebhookReques
 	m.mu.Unlock()
 
 	if response != nil {
-		response.ResponseTime = responseTime
+		response.Duration = responseTime
 	}
 
 	return response, result.LastError
 }
 
 // validateRequest validates a webhook request
-func (m *Manager) validateRequest(request *client.WebhookRequest) error {
+func (m *Manager) validateRequest(request *WebhookRequest) error {
 	if request == nil {
 		return fmt.Errorf("request cannot be nil")
 	}
@@ -447,7 +463,7 @@ func (m *Manager) validateRequest(request *client.WebhookRequest) error {
 }
 
 // sendHTTPRequest sends a single HTTP request
-func (m *Manager) sendHTTPRequest(ctx context.Context, request *client.WebhookRequest) (*client.WebhookResponse, error) {
+func (m *Manager) sendHTTPRequest(ctx context.Context, request *WebhookRequest) (*WebhookResponse, error) {
 	// Create HTTP request
 	httpReq, err := http.NewRequestWithContext(ctx, request.Method, request.URL, nil)
 	if err != nil {
@@ -466,27 +482,12 @@ func (m *Manager) sendHTTPRequest(ctx context.Context, request *client.WebhookRe
 	httpReq.Header.Set("User-Agent", m.config.UserAgent)
 
 	// Set body if provided
-	if request.Body != nil {
-		var bodyBytes []byte
-		switch body := request.Body.(type) {
-		case []byte:
-			bodyBytes = body
-		case string:
-			bodyBytes = []byte(body)
-		default:
-			// Try to marshal as JSON
-			if jsonBytes, err := json.Marshal(body); err == nil {
-				bodyBytes = jsonBytes
-			}
-		}
-
-		if len(bodyBytes) > 0 {
-			httpReq.Body = io.NopCloser(strings.NewReader(string(bodyBytes)))
-			httpReq.ContentLength = int64(len(bodyBytes))
-			m.mu.Lock()
-			m.stats.BytesSent += int64(len(bodyBytes))
-			m.mu.Unlock()
-		}
+	if request.Body != nil && len(request.Body) > 0 {
+		httpReq.Body = io.NopCloser(strings.NewReader(string(request.Body)))
+		httpReq.ContentLength = int64(len(request.Body))
+		m.mu.Lock()
+		m.stats.BytesSent += int64(len(request.Body))
+		m.mu.Unlock()
 	}
 
 	// Send request
@@ -515,7 +516,7 @@ func (m *Manager) sendHTTPRequest(ctx context.Context, request *client.WebhookRe
 		}
 	}
 
-	response := &client.WebhookResponse{
+	response := &WebhookResponse{
 		StatusCode:    resp.StatusCode,
 		Headers:       headers,
 		Body:          body,

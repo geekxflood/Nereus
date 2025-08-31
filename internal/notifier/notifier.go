@@ -18,14 +18,14 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	"github.com/geekxflood/common/config"
-	"github.com/geekxflood/nereus/internal/client"
+	"github.com/geekxflood/nereus/internal/infra"
 	"github.com/geekxflood/nereus/internal/storage"
 	"github.com/prometheus/common/model"
 )
 
 // WebhookSender defines the interface for sending webhook requests
 type WebhookSender interface {
-	SendWebhook(ctx context.Context, request *client.WebhookRequest) (*client.WebhookResponse, error)
+	SendWebhook(ctx context.Context, request *infra.WebhookRequest) (*infra.WebhookResponse, error)
 }
 
 // AlertConverter converts SNMP trap events to Prometheus alert format
@@ -869,7 +869,7 @@ func (n *Notifier) sendHTTPRequest(webhook *WebhookConfig, payload []byte) error
 	defer cancel()
 
 	// Prepare request
-	req := &client.WebhookRequest{
+	req := &infra.WebhookRequest{
 		Method:  webhook.Method,
 		URL:     webhook.URL,
 		Body:    payload,

@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/geekxflood/nereus/internal/client"
+	"github.com/geekxflood/common/logging"
+	"github.com/geekxflood/nereus/internal/infra"
 	"github.com/geekxflood/nereus/internal/storage"
 )
 
@@ -206,14 +207,25 @@ func createTestConfig() *MockConfigProvider {
 	return cfg
 }
 
+func createTestInfraManager(cfg *MockConfigProvider) (*infra.Manager, error) {
+	logger, _, err := logging.NewLogger(logging.Config{
+		Level:  "debug",
+		Format: "json",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return infra.NewManager(cfg, logger)
+}
+
 func TestNewNotifier(t *testing.T) {
 	cfg := createTestConfig()
-	httpClient, err := client.NewHTTPClient(cfg)
+	infraManager, err := createTestInfraManager(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create HTTP client: %v", err)
+		t.Fatalf("Failed to create infra manager: %v", err)
 	}
 
-	notifier, err := NewNotifier(cfg, httpClient)
+	notifier, err := NewNotifier(cfg, infraManager)
 	if err != nil {
 		t.Fatalf("Failed to create notifier: %v", err)
 	}
@@ -249,12 +261,12 @@ func TestNewNotifier(t *testing.T) {
 
 func TestNewNotifierWithNilConfig(t *testing.T) {
 	cfg := createTestConfig()
-	httpClient, err := client.NewHTTPClient(cfg)
+	infraManager, err := createTestInfraManager(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create HTTP client: %v", err)
+		t.Fatalf("Failed to create infra manager: %v", err)
 	}
 
-	_, err = NewNotifier(nil, httpClient)
+	_, err = NewNotifier(nil, infraManager)
 	if err == nil {
 		t.Error("Expected error for nil config")
 	}
@@ -326,12 +338,12 @@ func TestLoadDefaultTemplate(t *testing.T) {
 
 func TestNotifierStartStop(t *testing.T) {
 	cfg := createTestConfig()
-	httpClient, err := client.NewHTTPClient(cfg)
+	infraManager, err := createTestInfraManager(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create HTTP client: %v", err)
+		t.Fatalf("Failed to create infra manager: %v", err)
 	}
 
-	notifier, err := NewNotifier(cfg, httpClient)
+	notifier, err := NewNotifier(cfg, infraManager)
 	if err != nil {
 		t.Fatalf("Failed to create notifier: %v", err)
 	}
@@ -354,12 +366,12 @@ func TestNotifierStartStop(t *testing.T) {
 
 func TestGeneratePayloadAlertmanager(t *testing.T) {
 	cfg := createTestConfig()
-	httpClient, err := client.NewHTTPClient(cfg)
+	infraManager, err := createTestInfraManager(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create HTTP client: %v", err)
+		t.Fatalf("Failed to create infra manager: %v", err)
 	}
 
-	notifier, err := NewNotifier(cfg, httpClient)
+	notifier, err := NewNotifier(cfg, infraManager)
 	if err != nil {
 		t.Fatalf("Failed to create notifier: %v", err)
 	}
@@ -399,12 +411,12 @@ func TestGeneratePayloadAlertmanager(t *testing.T) {
 
 func TestGeneratePayloadCustom(t *testing.T) {
 	cfg := createTestConfig()
-	httpClient, err := client.NewHTTPClient(cfg)
+	infraManager, err := createTestInfraManager(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create HTTP client: %v", err)
+		t.Fatalf("Failed to create infra manager: %v", err)
 	}
 
-	notifier, err := NewNotifier(cfg, httpClient)
+	notifier, err := NewNotifier(cfg, infraManager)
 	if err != nil {
 		t.Fatalf("Failed to create notifier: %v", err)
 	}
@@ -467,12 +479,12 @@ func TestSendNotificationWithMockServer(t *testing.T) {
 	}
 	cfg.Set("notifier.default_webhooks", webhooks)
 
-	httpClient, err := client.NewHTTPClient(cfg)
+	infraManager, err := createTestInfraManager(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create HTTP client: %v", err)
+		t.Fatalf("Failed to create infra manager: %v", err)
 	}
 
-	notifier, err := NewNotifier(cfg, httpClient)
+	notifier, err := NewNotifier(cfg, infraManager)
 	if err != nil {
 		t.Fatalf("Failed to create notifier: %v", err)
 	}
@@ -513,12 +525,12 @@ func TestSendNotificationWithMockServer(t *testing.T) {
 
 func TestFilterEvaluation(t *testing.T) {
 	cfg := createTestConfig()
-	httpClient, err := client.NewHTTPClient(cfg)
+	infraManager, err := createTestInfraManager(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create HTTP client: %v", err)
+		t.Fatalf("Failed to create infra manager: %v", err)
 	}
 
-	notifier, err := NewNotifier(cfg, httpClient)
+	notifier, err := NewNotifier(cfg, infraManager)
 	if err != nil {
 		t.Fatalf("Failed to create notifier: %v", err)
 	}
