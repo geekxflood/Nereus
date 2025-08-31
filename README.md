@@ -1,4 +1,4 @@
-# Nereus SNMP Trap Alerting System
+# Nereus
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -9,30 +9,35 @@ Nereus is a production-ready SNMP trap alerting system designed for enterprise m
 ## 🚀 Key Features
 
 ### 📡 **Enterprise SNMP Processing**
+
 - **SNMPv2c Support**: Full SNMPv2c trap processing with validation
 - **High-Performance Parsing**: Concurrent trap processing with configurable worker pools
 - **MIB Integration**: Automatic OID resolution using standard and custom MIB files
 - **Hot Reload**: Dynamic MIB and configuration reloading without service restart
 
 ### 🧠 **Intelligent Event Correlation**
+
 - **Deduplication**: Automatic duplicate event detection and suppression
 - **Event Grouping**: Intelligent correlation of related events
 - **Flapping Detection**: Automatic detection and handling of oscillating events
 - **Severity Mapping**: Configurable severity assignment based on trap OIDs
 
 ### 🔔 **Flexible Notification System**
+
 - **Multiple Formats**: Alertmanager, Prometheus, and custom webhook formats
 - **Template Engine**: CUE-based templating for custom notification payloads
 - **Retry Logic**: Exponential backoff with circuit breaker patterns
 - **Multi-Destination**: Support for multiple webhook endpoints with filtering
 
 ### 📊 **Observability & Monitoring**
+
 - **Prometheus Metrics**: Comprehensive metrics for all system components
 - **Health Checks**: Kubernetes-ready health and readiness endpoints
 - **Structured Logging**: JSON-formatted logs with configurable levels
 - **Performance Tracking**: Detailed timing and throughput metrics
 
 ### 🏗️ **Production Ready**
+
 - **High Availability**: Stateless design for horizontal scaling
 - **Persistent Storage**: SQLite-based event storage with configurable retention
 - **Configuration Management**: CUE schema validation with hot reload
@@ -41,6 +46,7 @@ Nereus is a production-ready SNMP trap alerting system designed for enterprise m
 ## 📋 Quick Start
 
 ### Prerequisites
+
 - Go 1.25+ (for building from source)
 - Docker (for containerized deployment)
 - Standard SNMP MIB files (SNMPv2-SMI, SNMPv2-TC, SNMPv2-MIB)
@@ -48,6 +54,7 @@ Nereus is a production-ready SNMP trap alerting system designed for enterprise m
 ### Installation Options
 
 #### 🐳 Docker (Recommended)
+
 ```bash
 # Pull and run the latest image
 docker run -d \
@@ -60,6 +67,7 @@ docker run -d \
 ```
 
 #### 🔨 Build from Source
+
 ```bash
 git clone https://github.com/geekxflood/nereus.git
 cd nereus
@@ -221,7 +229,7 @@ spec:
 
 Nereus follows a modular architecture with clear separation of concerns:
 
-```
+```txt
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   SNMP Traps    │───▶│   Listener      │───▶│   Event Parser  │
 │   (UDP:162)     │    │   (Validation)  │    │   (MIB Lookup)  │
@@ -302,17 +310,3 @@ go build -o nereus ./main.go
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/geekxflood/nereus/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/geekxflood/nereus/discussions)
-
-## 🏷️ Version History
-
-See [CHANGELOG.md](CHANGELOG.md) for detailed version history and release notes.
-
----
-
-**Nereus** - Named after the ancient Greek sea god, protector of sailors and fishermen, reflecting the system's role in monitoring and protecting network infrastructure.

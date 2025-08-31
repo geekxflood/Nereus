@@ -21,6 +21,7 @@ Configurable via `metrics.listen_address` in configuration.
 **Description**: Liveness probe endpoint that indicates if the service is running.
 
 **Response**:
+
 ```json
 {
   "status": "ok",
@@ -31,10 +32,12 @@ Configurable via `metrics.listen_address` in configuration.
 ```
 
 **Status Codes**:
+
 - `200 OK`: Service is running
 - `503 Service Unavailable`: Service is not healthy
 
 **Example**:
+
 ```bash
 curl http://localhost:9090/health
 ```
@@ -46,6 +49,7 @@ curl http://localhost:9090/health
 **Description**: Readiness probe that indicates if the service is ready to accept traffic.
 
 **Response**:
+
 ```json
 {
   "status": "ready",
@@ -61,15 +65,18 @@ curl http://localhost:9090/health
 ```
 
 **Status Codes**:
+
 - `200 OK`: Service is ready
 - `503 Service Unavailable`: Service is not ready
 
 **Component States**:
+
 - `ready`: Component is operational
 - `starting`: Component is initializing
 - `error`: Component has failed
 
 **Example**:
+
 ```bash
 curl http://localhost:9090/ready
 ```
@@ -85,6 +92,7 @@ curl http://localhost:9090/ready
 **Content-Type**: `text/plain; version=0.0.4; charset=utf-8`
 
 **Example**:
+
 ```bash
 curl http://localhost:9090/metrics
 ```
@@ -94,13 +102,15 @@ curl http://localhost:9090/metrics
 ### SNMP Trap Metrics
 
 #### nereus_traps_received_total
-**Type**: Counter  
-**Description**: Total number of SNMP traps received  
+
+**Type**: Counter
+**Description**: Total number of SNMP traps received
 **Labels**:
+
 - `source_ip`: Source IP address of the trap
 - `community`: SNMP community string
 
-```
+```promql
 nereus_traps_received_total{source_ip="192.168.1.100",community="public"} 1234
 ```
 
