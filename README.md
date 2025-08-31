@@ -1,302 +1,318 @@
-# Nereus
+# Nereus SNMP Trap Alerting System
 
-Nereus is an SNMP trap alerting system designed to monitor, parse, and manage alerts with intelligent event correlation and notification capabilities.
+[![Go Version](https://img.shields.io/badge/Go-1.25+-blue.svg)](https://golang.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
 
-## Features
+Nereus is a production-ready SNMP trap alerting system designed for enterprise monitoring environments. It provides intelligent event correlation, MIB-based parsing, and flexible notification delivery with high performance and reliability.
 
-### 🔔 SNMP Trap Management
+## 🚀 Key Features
 
-- **Real-time Trap Reception**: Listens for SNMP traps
-- **MIB-based OID Parsing**: Automatically parses Object Identifiers using MIB files
-- **Event Registration**: Captures and registers trap events with full context
-- **Intelligent Resolution**: Correlates resolve trap events to automatically close alerts
+### 📡 **Enterprise SNMP Processing**
+- **SNMPv2c Support**: Full SNMPv2c trap processing with validation
+- **High-Performance Parsing**: Concurrent trap processing with configurable worker pools
+- **MIB Integration**: Automatic OID resolution using standard and custom MIB files
+- **Hot Reload**: Dynamic MIB and configuration reloading without service restart
 
-### 🔍 Advanced Parsing & Correlation
+### 🧠 **Intelligent Event Correlation**
+- **Deduplication**: Automatic duplicate event detection and suppression
+- **Event Grouping**: Intelligent correlation of related events
+- **Flapping Detection**: Automatic detection and handling of oscillating events
+- **Severity Mapping**: Configurable severity assignment based on trap OIDs
 
-- **MIB File Support**: Load MIB files from configurable folder paths
-- **OID Resolution**: Translate numeric OIDs to human-readable names and descriptions
-- **Event Correlation**: Link related trap events for comprehensive incident tracking
-- **Context Preservation**: Maintain full trap data including varbinds and timestamps
+### 🔔 **Flexible Notification System**
+- **Multiple Formats**: Alertmanager, Prometheus, and custom webhook formats
+- **Template Engine**: CUE-based templating for custom notification payloads
+- **Retry Logic**: Exponential backoff with circuit breaker patterns
+- **Multi-Destination**: Support for multiple webhook endpoints with filtering
 
-### 🚨 Alert Notifications
+### 📊 **Observability & Monitoring**
+- **Prometheus Metrics**: Comprehensive metrics for all system components
+- **Health Checks**: Kubernetes-ready health and readiness endpoints
+- **Structured Logging**: JSON-formatted logs with configurable levels
+- **Performance Tracking**: Detailed timing and throughput metrics
 
-- **Prometheus Integration**: Native support for Prometheus alert format and Alertmanager
-- **Webhook Integration**: Send alerts to external systems via HTTP webhooks
-- **Multiple Formats**: Support for Prometheus, Alertmanager, and custom template formats
-- **Configurable Templates**: Customize notification payloads and formats
-- **Multiple Endpoints**: Support for multiple webhook destinations
-- **Retry Logic**: Built-in retry mechanisms for reliable delivery
+### 🏗️ **Production Ready**
+- **High Availability**: Stateless design for horizontal scaling
+- **Persistent Storage**: SQLite-based event storage with configurable retention
+- **Configuration Management**: CUE schema validation with hot reload
+- **Container Support**: Multi-stage Docker builds with security best practices
 
-## Installation
+## 📋 Quick Start
 
 ### Prerequisites
+- Go 1.25+ (for building from source)
+- Docker (for containerized deployment)
+- Standard SNMP MIB files (SNMPv2-SMI, SNMPv2-TC, SNMPv2-MIB)
 
-- Go 1.25 or later
-- Access to MIB files
+### Installation Options
 
-### Build from Source
+#### 🐳 Docker (Recommended)
+```bash
+# Pull and run the latest image
+docker run -d \
+  --name nereus \
+  -p 162:162/udp \
+  -p 9090:9090 \
+  -v /path/to/config:/etc/nereus \
+  -v /path/to/mibs:/usr/share/snmp/mibs \
+  geekxflood/nereus:latest
+```
 
+#### 🔨 Build from Source
 ```bash
 git clone https://github.com/geekxflood/nereus.git
 cd nereus
-go build -o nereus ./main.go
+go build -ldflags "-X main.version=$(git describe --tags)" -o nereus ./main.go
+./nereus --config examples/config.yaml
 ```
 
-### Docker
+## 📖 Documentation
+
+| Topic             | Description                        | Link                                       |
+| ----------------- | ---------------------------------- | ------------------------------------------ |
+| **Configuration** | Complete configuration reference   | [docs/configuration/](docs/configuration/) |
+| **Architecture**  | System design and components       | [docs/architecture/](docs/architecture/)   |
+| **Deployment**    | Production deployment guides       | [docs/deployment/](docs/deployment/)       |
+| **Development**   | Contributing and development setup | [docs/development/](docs/development/)     |
+| **API Reference** | REST API and metrics endpoints     | [docs/api/](docs/api/)                     |
+
+## ⚡ Quick Configuration
+
+Generate a sample configuration file:
 
 ```bash
-docker build -t nereus .
-docker run -p 162:162/udp nereus
+./nereus generate --output config.yaml
 ```
 
-## Configuration
-
-Nereus uses CUE-based configuration for type-safe and validated settings:
+Basic configuration example:
 
 ```yaml
 # config.yaml
+app:
+  name: "nereus-snmp-listener"
+  version: "1.0.0"
+
 server:
   host: "0.0.0.0"
   port: 162
-  community: "public"
+  buffer_size: 65536
 
-mibs:
-  path: "/opt/mibs"
-  auto_load: true
+mib:
+  directories: ["/usr/share/snmp/mibs"]
+  enable_hot_reload: true
+  required_mibs: ["SNMPv2-SMI", "SNMPv2-TC", "SNMPv2-MIB"]
 
-webhooks:
-  - name: "alertmanager"
-    url: "http://alertmanager:9093/api/v2/alerts"
-    insecure: false
-    timeout: "30s"
-    retry_count: 3
+correlator:
+  enable_correlation: true
+  deduplication_window: "5m"
+  correlation_window: "10m"
+
+notifier:
+  enable_notifications: true
+  default_webhooks:
+    - name: "alertmanager"
+      url: "http://alertmanager:9093/api/v1/alerts"
+      format: "alertmanager"
+      timeout: "30s"
+
+storage:
+  connection_string: "./nereus_events.db"
+  retention_days: 30
+
+metrics:
+  enabled: true
+  listen_address: ":9090"
 
 logging:
   level: "info"
   format: "json"
-  component: "nereus"
 ```
 
-### Prometheus Integration
+Validate your configuration:
 
-Nereus provides native support for Prometheus alert format, allowing you to send SNMP traps directly to Alertmanager or other Prometheus-compatible systems.
-
-#### Configuration Example
-
-```yaml
-notifier:
-  default_webhooks:
-    - name: "alertmanager"
-      url: "http://alertmanager:9093/api/v1/alerts"
-      method: "POST"
-      format: "alertmanager"  # Use Prometheus alert format
-      enabled: true
-      timeout: "10s"
-      content_type: "application/json"
+```bash
+./nereus validate --config config.yaml
 ```
 
-#### Alert Format
+## 🚀 Usage
 
-SNMP traps are automatically converted to Prometheus alerts with:
-
-- **Labels**: `alertname`, `source_ip`, `severity`, `trap_oid`, `trap_name`, `correlation_id`
-- **Annotations**: `summary`, `description`, `varbinds`, `metadata`, timestamps
-- **Timing**: `StartsAt` set to trap timestamp, `EndsAt` for resolved alerts
-
-See `examples/prometheus-config.yml` for a complete Prometheus integration example.
-
-### CUE-Based Template System
-
-Nereus uses embedded CUE templates for type-safe, validated notification formatting:
-
-#### Built-in Templates
-
-- **default**: Standard JSON notification format
-- **slack**: Slack webhook format with rich attachments
-- **pagerduty**: PagerDuty Events API v2 format
-- **email**: HTML email template with styling
-
-#### Template Configuration
-
-```yaml
-notifier:
-  default_webhooks:
-    - name: "slack-alerts"
-      url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
-      template: "slack"  # Uses embedded Slack CUE template
-      format: "custom"
-```
-
-#### Template Features
-
-- **Type Safety**: CUE validation ensures template correctness
-- **Field Validation**: Required/optional field checking
-- **Severity Mapping**: Automatic color coding and priority mapping
-- **Usage Examples**: Built-in examples and documentation
-- **Performance**: Compiled templates with caching
-
-## Usage
-
-### Basic Commands
+### Command Line Interface
 
 ```bash
 # Start the SNMP trap listener
-nereus
-
-# Validate configuration
-nereus validate --config config.yaml
+./nereus --config config.yaml
 
 # Generate sample configuration
-nereus generate --output config.yaml
+./nereus generate --output config.yaml
+
+# Validate configuration and MIB files
+./nereus validate --config config.yaml --check-mibs
+
+# Show version information
+./nereus --version
+
+# Show help
+./nereus --help
 ```
 
-### Command Line Options
-
-```bash
-nereus [command]
-
-Available Commands:
-  generate    Generate sample configuration files
-  validate    Validate configuration and MIB files
-  help        Help about any command
-
-Flags:
-  -c, --config string   Configuration file path
-  -h, --help           Help for nereus
-  -v, --version        Version information
-```
-
-### Docker Compose Example
+### Docker Compose
 
 ```yaml
 version: '3.8'
 services:
   nereus:
-    image: nereus:latest
+    image: geekxflood/nereus:latest
     ports:
-      - "162:162/udp"
-    privileged: true
+      - "162:162/udp"  # SNMP trap port
+      - "9090:9090"    # Metrics port
     volumes:
-      - ./config.yaml:/app/config.yaml
-      - ./mibs:/opt/mibs
+      - ./config.yaml:/etc/nereus/config.yaml
+      - ./mibs:/usr/share/snmp/mibs
+      - ./data:/var/lib/nereus
     environment:
-      - NEREUS_CONFIG=/app/config.yaml
+      - NEREUS_LOG_LEVEL=info
     restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
 ```
 
-## Architecture
+### Kubernetes Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nereus
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nereus
+  template:
+    metadata:
+      labels:
+        app: nereus
+    spec:
+      containers:
+      - name: nereus
+        image: geekxflood/nereus:latest
+        ports:
+        - containerPort: 162
+          protocol: UDP
+        - containerPort: 9090
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 9090
+```
+
+## 🏗️ Architecture
+
+Nereus follows a modular architecture with clear separation of concerns:
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   SNMP Traps    │───▶│   Listener      │───▶│   Event Parser  │
+│   (UDP:162)     │    │   (Validation)  │    │   (MIB Lookup)  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                        │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Webhooks      │◀───│   Notifier      │◀───│   Correlator    │
+│   (HTTP/HTTPS)  │    │   (Templates)   │    │   (Dedup/Group) │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                        │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Prometheus    │◀───│   Metrics       │    │   Storage       │
+│   (Port 9090)   │    │   (Health)      │    │   (SQLite)      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
 
 ### Core Components
 
-```text
-nereus/
-├── cmd/                    # CLI commands
-│   ├── generate.go        # Configuration generation
-│   ├── validate.go        # Configuration validation
-│   └── schemas/           # CUE configuration schemas
-├── internal/              # Core application packages
-│   ├── app/              # Application orchestration and lifecycle
-│   ├── correlator/       # Event correlation and deduplication
-│   ├── events/           # Event processing and enrichment
-│   ├── infra/            # Infrastructure (HTTP client, OID resolution, hot reload)
-│   ├── listener/         # SNMP trap listener with validation
-│   ├── metrics/          # Prometheus metrics and monitoring
-│   ├── mib/              # MIB loading, parsing, and SNMP packet parsing
-│   ├── notifier/         # Webhook delivery and alert notifications
-│   ├── storage/          # Database operations and persistence
-│   └── types/            # Common types and data structures
-├── examples/             # Configuration examples
-└── main.go              # Application entry point
-```
+- **Listener**: SNMPv2c trap reception and validation
+- **MIB Manager**: OID resolution and MIB file management
+- **Event Processor**: Trap parsing and enrichment
+- **Correlator**: Event deduplication and correlation
+- **Notifier**: Webhook delivery with retry logic
+- **Storage**: Event persistence and retention
+- **Metrics**: Prometheus metrics and health monitoring
 
-### Event Flow
+## 📊 Monitoring & Metrics
 
-1. **Trap Reception**: SNMP listener receives and validates SNMPv2c traps
-2. **Packet Parsing**: SNMP packets parsed using integrated ASN.1 parser
-3. **MIB Resolution**: OIDs resolved to human-readable names using loaded MIB definitions
-4. **Event Processing**: Events enriched with metadata and context
-5. **Correlation**: Events deduplicated and correlated using simplified rule engine
-6. **Storage**: Event data persisted to SQLite database
-7. **Notification**: Webhook alerts sent to configured endpoints with retry logic
+Nereus exposes comprehensive metrics on port 9090:
 
-### Dependencies
+### Key Metrics
 
-- **geekxflood/common**: Logging and configuration management
-- **spf13/cobra**: CLI framework
-- **CUE**: Configuration schema validation
+- `nereus_traps_received_total`: Total SNMP traps received
+- `nereus_traps_processed_total`: Total traps successfully processed
+- `nereus_events_correlated_total`: Total events after correlation
+- `nereus_webhooks_sent_total`: Total webhook deliveries attempted
+- `nereus_webhook_duration_seconds`: Webhook delivery latency
+- `nereus_storage_operations_total`: Database operation counters
 
-## Configuration Schema
+### Health Endpoints
 
-The configuration is validated against a CUE schema ensuring type safety:
+- `GET /health`: Liveness probe (always returns 200 if running)
+- `GET /ready`: Readiness probe (checks all components)
+- `GET /metrics`: Prometheus metrics endpoint
 
-```cue
-server: {
-  host: string | *"0.0.0.0"
-  port: int & >=1 & <=65535 | *162
-  community: string | *"public"
-}
+## 🤝 Contributing
 
-mibs: {
-  path: string
-  auto_load: bool | *true
-}
+We welcome contributions! Please see our [Contributing Guide](docs/development/CONTRIBUTING.md) for details.
 
-webhooks: [...{
-  name: string
-  url: string
-  timeout: string | *"30s"
-  retry_count: int | *3
-}]
-```
-
-## Development
-
-### Testing
+### Development Setup
 
 ```bash
+# Clone the repository
+git clone https://github.com/geekxflood/nereus.git
+cd nereus
+
+# Install dependencies
+go mod download
+
+# Run tests
 go test ./...
-```
 
-### Building
-
-```bash
+# Build for development
 go build -o nereus ./main.go
+
+# Run with sample configuration
+./nereus --config examples/config.yaml
 ```
 
 ### Code Quality
 
-```bash
-# Run linter
-golangci-lint run
+- **Go Version**: 1.25+
+- **Testing**: Comprehensive unit and integration tests
+- **Linting**: golangci-lint with strict rules
+- **Documentation**: GoDoc for all public APIs
+- **Security**: gosec security scanning
 
-# Security scan
-gosec ./...
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Guidelines
-
-- Follow Go coding standards
-- Add tests for new features
-- Update documentation
-- Use structured logging
-- Validate configurations
-
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
+## 🆘 Support
 
-For support and questions:
+- **Documentation**: [docs/](docs/)
+- **Issues**: [GitHub Issues](https://github.com/geekxflood/nereus/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/geekxflood/nereus/discussions)
 
-- Open an issue on GitHub
-- Check the documentation
-- Review example configurations
+## 🏷️ Version History
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history and release notes.
+
+---
+
+**Nereus** - Named after the ancient Greek sea god, protector of sailors and fishermen, reflecting the system's role in monitoring and protecting network infrastructure.
