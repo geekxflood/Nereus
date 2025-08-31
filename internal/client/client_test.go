@@ -433,7 +433,7 @@ func TestCategorizeError(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result := client.categorizeError(fmt.Errorf(tc.error))
+		result := client.categorizeError(fmt.Errorf("%s", tc.error))
 		if result != tc.expected {
 			t.Errorf("categorizeError(%s) = %s, expected %s", tc.error, result, tc.expected)
 		}

@@ -245,8 +245,18 @@ func (c *HTTPClient) validateRequest(request *WebhookRequest) error {
 	}
 
 	// Validate URL format
-	if _, err := url.Parse(request.URL); err != nil {
+	parsedURL, err := url.Parse(request.URL)
+	if err != nil {
 		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	// Ensure URL has a scheme (http or https)
+	if parsedURL.Scheme == "" {
+		return fmt.Errorf("URL must include scheme (http or https)")
+	}
+
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("URL scheme must be http or https, got: %s", parsedURL.Scheme)
 	}
 
 	// Set default method if not specified
@@ -393,17 +403,23 @@ func (c *HTTPClient) recordError(errorType string) {
 func (c *HTTPClient) categorizeError(err error) string {
 	errStr := err.Error()
 
-	if strings.Contains(errStr, "timeout") {
+	// Check for context deadline exceeded (timeout)
+	if strings.Contains(errStr, "context deadline exceeded") {
 		return "timeout"
+	}
+	// Check for other timeout patterns
+	if strings.Contains(errStr, "timeout") && !strings.Contains(errStr, "tls handshake timeout") {
+		return "timeout"
+	}
+	// TLS-specific errors (including TLS handshake timeout)
+	if strings.Contains(errStr, "certificate") || strings.Contains(errStr, "tls") {
+		return "tls_error"
 	}
 	if strings.Contains(errStr, "connection refused") {
 		return "connection_refused"
 	}
 	if strings.Contains(errStr, "no such host") {
 		return "dns_error"
-	}
-	if strings.Contains(errStr, "certificate") || strings.Contains(errStr, "tls") {
-		return "tls_error"
 	}
 
 	return "other"

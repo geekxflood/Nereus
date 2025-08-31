@@ -1,0 +1,124 @@
+# GoReleaser configuration for Nereus SNMP Trap Alerting System
+# Simplified configuration for Linux binary and Docker image only
+
+project_name: nereus
+
+# Environment variables to set during build
+env:
+  - CGO_ENABLED=0
+
+# Before hooks - run before building
+before:
+  hooks:
+    - go mod tidy
+
+# Build configuration - Linux only
+builds:
+  - id: nereus-linux
+    binary: nereus
+    main: ./main.go
+
+    # Build flags as specified in requirements
+    ldflags:
+      - -X main.version={{.Version}}
+      - -X main.buildTime={{.Date}}
+      - -X main.commitHash={{.ShortCommit}}
+      - -w -s
+
+    # Target platforms - Linux only
+    goos:
+      - linux
+
+    goarch:
+      - amd64
+
+# Archive configuration
+archives:
+  - id: nereus-archive
+    builds:
+      - nereus-linux
+
+    name_template: "{{ .ProjectName }}-{{ .Version }}-linux-amd64"
+    format: tar.gz
+
+    files:
+      - README.md
+      - LICENSE
+      - examples/config.yaml
+      - docs/*.md
+
+# Checksum configuration
+checksum:
+  name_template: "{{ .ProjectName }}-{{ .Version }}-checksums.txt"
+  algorithm: sha256
+
+# Snapshot configuration
+snapshot:
+  name_template: "{{ .Version }}-next"
+
+# Changelog configuration
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+
+# Docker configuration
+dockers:
+  - id: nereus-docker
+    goos: linux
+    goarch: amd64
+
+    image_templates:
+      - "geekxflood/nereus:{{ .Version }}"
+      - "geekxflood/nereus:latest"
+
+    dockerfile: Dockerfile
+
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--platform=linux/amd64"
+
+# Release configuration
+release:
+  github:
+    owner: geekxflood
+    name: nereus
+
+  # Release notes
+  header: |
+    ## Nereus {{ .Version }}
+
+    Welcome to this new release of Nereus SNMP Trap Alerting System!
+
+  footer: |
+    ## Installation
+
+    ### Binary Download
+    Download the Linux binary from the assets below.
+
+    ### Docker
+    ```bash
+    docker pull geekxflood/nereus:{{ .Version }}
+    ```
+
+    ## Documentation
+
+    - [Installation Guide](https://github.com/geekxflood/nereus/blob/main/docs/DEPLOYMENT.md)
+    - [Configuration Reference](https://github.com/geekxflood/nereus/blob/main/examples/config.yaml)
+    - [API Documentation](https://github.com/geekxflood/nereus/blob/main/docs/API.md)
+    - [Troubleshooting](https://github.com/geekxflood/nereus/blob/main/docs/TROUBLESHOOTING.md)
+
+  # Draft release
+  draft: false
+
+  # Prerelease detection
+  prerelease: auto
