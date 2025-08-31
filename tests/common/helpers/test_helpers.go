@@ -11,14 +11,68 @@ import (
 	"testing"
 	"time"
 
-	"github.com/geekxflood/common/config"
 	"github.com/geekxflood/common/logging"
 	"github.com/geekxflood/nereus/internal/types"
 )
 
+// simpleConfigProvider is a basic config provider for testing
+type simpleConfigProvider struct {
+	data map[string]interface{}
+}
+
+func (s *simpleConfigProvider) GetString(key string) string {
+	if val, ok := s.data[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	// Handle nested keys like "app.name"
+	if key == "app.name" {
+		if appMap, ok := s.data["app"].(map[string]interface{}); ok {
+			if name, ok := appMap["name"].(string); ok {
+				return name
+			}
+		}
+	}
+	if key == "logging.level" {
+		if loggingMap, ok := s.data["logging"].(map[string]interface{}); ok {
+			if level, ok := loggingMap["level"].(string); ok {
+				return level
+			}
+		}
+	}
+	return ""
+}
+
+func (s *simpleConfigProvider) GetBool(key string) bool {
+	if val, ok := s.data[key]; ok {
+		if b, ok := val.(bool); ok {
+			return b
+		}
+	}
+	// Handle nested keys like "storage.enabled"
+	if key == "storage.enabled" {
+		if storageMap, ok := s.data["storage"].(map[string]interface{}); ok {
+			if enabled, ok := storageMap["enabled"].(bool); ok {
+				return enabled
+			}
+		}
+	}
+	return false
+}
+
+func (s *simpleConfigProvider) GetInt(key string) int {
+	if val, ok := s.data[key]; ok {
+		if i, ok := val.(int); ok {
+			return i
+		}
+	}
+	return 0
+}
+
 // TestEnvironment provides a complete test environment for Nereus testing
 type TestEnvironment struct {
-	Config     config.Provider
+	Config     *simpleConfigProvider
 	Logger     logging.Logger
 	TempDir    string
 	DBPath     string
@@ -49,6 +103,47 @@ func SetupTestEnvironment(t *testing.T, configOverrides map[string]interface{}) 
 	// Database path
 	dbPath := filepath.Join(dbDir, "nereus-test.db")
 
+	// Create test database with schema
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+
+	// Create events table schema
+	createTableSQL := `
+	CREATE TABLE IF NOT EXISTS events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		source_ip TEXT NOT NULL,
+		community TEXT NOT NULL,
+		version INTEGER NOT NULL,
+		pdu_type INTEGER NOT NULL,
+		request_id INTEGER NOT NULL,
+		trap_oid TEXT NOT NULL,
+		trap_name TEXT,
+		severity TEXT NOT NULL DEFAULT 'info',
+		status TEXT NOT NULL DEFAULT 'open',
+		acknowledged BOOLEAN NOT NULL DEFAULT 0,
+		ack_by TEXT,
+		ack_time DATETIME,
+		count INTEGER NOT NULL DEFAULT 1,
+		first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		varbinds TEXT NOT NULL DEFAULT '[]',
+		metadata TEXT NOT NULL DEFAULT '{}',
+		hash TEXT NOT NULL,
+		correlation_id TEXT,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);`
+
+	_, err = db.Exec(createTableSQL)
+	if err != nil {
+		db.Close()
+		t.Fatalf("Failed to create events table: %v", err)
+	}
+	db.Close()
+
 	// Create test configuration
 	configPath := filepath.Join(configDir, "test-config.yaml")
 	testConfig := CreateTestConfig(dbPath, mibDir, configOverrides)
@@ -56,14 +151,12 @@ func SetupTestEnvironment(t *testing.T, configOverrides map[string]interface{}) 
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	// Load configuration
-	cfg, err := config.LoadConfig(configPath)
-	if err != nil {
-		t.Fatalf("Failed to load test config: %v", err)
-	}
+	// For now, create a simple config provider
+	// In a real implementation, you would use the actual config loading
+	cfg := &simpleConfigProvider{data: testConfig}
 
 	// Create logger
-	logger, err := logging.NewLogger(logging.Config{
+	logger, _, err := logging.NewLogger(logging.Config{
 		Level:  "debug",
 		Format: "json",
 	})
@@ -124,23 +217,23 @@ func CreateTestConfig(dbPath, mibDir string, overrides map[string]interface{}) m
 			"buffer_size":     100,
 		},
 		"storage": map[string]interface{}{
-			"enabled":        true,
-			"driver":         "sqlite",
-			"connection":     dbPath,
+			"enabled":         true,
+			"driver":          "sqlite",
+			"connection":      dbPath,
 			"max_connections": 10,
-			"batch_size":     100,
-			"batch_timeout":  "5s",
-			"retention_days": 30,
+			"batch_size":      100,
+			"batch_timeout":   "5s",
+			"retention_days":  30,
 		},
 		"events": map[string]interface{}{
-			"enable_enrichment":  true,
-			"enable_correlation": true,
-			"enable_storage":     true,
+			"enable_enrichment":   true,
+			"enable_correlation":  true,
+			"enable_storage":      true,
 			"enable_notification": false, // Disable for most tests
 		},
 		"mib": map[string]interface{}{
-			"directories": []string{mibDir},
-			"file_extensions": []string{".mib", ".txt", ".my"},
+			"directories":        []string{mibDir},
+			"file_extensions":    []string{".mib", ".txt", ".my"},
 			"max_file_size":      "10MB",
 			"enable_hot_reload":  false,
 			"cache_enabled":      true,
@@ -148,10 +241,10 @@ func CreateTestConfig(dbPath, mibDir string, overrides map[string]interface{}) m
 			"validation_enabled": false, // Disable for faster tests
 		},
 		"correlation": map[string]interface{}{
-			"enabled":           true,
-			"time_window":       "5m",
-			"max_group_size":    100,
-			"cleanup_interval":  "10m",
+			"enabled":          true,
+			"time_window":      "5m",
+			"max_group_size":   100,
+			"cleanup_interval": "10m",
 		},
 		"notification": map[string]interface{}{
 			"enabled": false, // Disabled by default for tests
@@ -307,7 +400,7 @@ func CreateTestSNMPPacket(trapOID string, varbinds []types.Varbind) *types.SNMPP
 func CreateTestVarbind(oid, value string) types.Varbind {
 	return types.Varbind{
 		OID:   oid,
-		Type:  "string",
+		Type:  types.TypeOctetString,
 		Value: value,
 	}
 }

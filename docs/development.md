@@ -43,7 +43,7 @@ go install golang.org/x/tools/cmd/goimports@latest
 
 ## Project Structure
 
-```
+```txt
 nereus/
 ├── cmd/                    # CLI commands and schemas
 │   ├── generate.go        # Configuration generation command

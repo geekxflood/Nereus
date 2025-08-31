@@ -1,0 +1,330 @@
+TEST-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, NOTIFICATION-TYPE,
+    Integer32, Counter32, Gauge32, TimeTicks
+        FROM SNMPv2-SMI
+    TEXTUAL-CONVENTION, DisplayString, TruthValue
+        FROM SNMPv2-TC
+    MODULE-COMPLIANCE, OBJECT-GROUP, NOTIFICATION-GROUP
+        FROM SNMPv2-CONF;
+
+testMIB MODULE-IDENTITY
+    LAST-UPDATED "202401010000Z"
+    ORGANIZATION "Nereus Test Organization"
+    CONTACT-INFO
+        "Test Contact
+         Email: test@example.com"
+    DESCRIPTION
+        "Test MIB for Nereus SNMP trap testing.
+         This MIB defines test objects and notifications
+         for comprehensive testing scenarios."
+    REVISION "202401010000Z"
+    DESCRIPTION
+        "Initial version of the test MIB."
+    ::= { enterprises 99999 }
+
+-- Textual Conventions
+TestSeverity ::= TEXTUAL-CONVENTION
+    STATUS current
+    DESCRIPTION
+        "Severity levels for test notifications."
+    SYNTAX INTEGER {
+        info(1),
+        warning(2),
+        error(3),
+        critical(4)
+    }
+
+TestStatus ::= TEXTUAL-CONVENTION
+    STATUS current
+    DESCRIPTION
+        "Status values for test objects."
+    SYNTAX INTEGER {
+        unknown(1),
+        ok(2),
+        degraded(3),
+        failed(4)
+    }
+
+-- Object Identifiers
+testObjects     OBJECT IDENTIFIER ::= { testMIB 1 }
+testTraps       OBJECT IDENTIFIER ::= { testMIB 2 }
+testConformance OBJECT IDENTIFIER ::= { testMIB 3 }
+
+-- Test Objects
+testSystem      OBJECT IDENTIFIER ::= { testObjects 1 }
+testNetwork     OBJECT IDENTIFIER ::= { testObjects 2 }
+testHardware    OBJECT IDENTIFIER ::= { testObjects 3 }
+
+-- System Test Objects
+testSystemName OBJECT-TYPE
+    SYNTAX DisplayString (SIZE(0..255))
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Name of the test system."
+    ::= { testSystem 1 }
+
+testSystemUpTime OBJECT-TYPE
+    SYNTAX TimeTicks
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Time since the test system was last initialized."
+    ::= { testSystem 2 }
+
+testSystemStatus OBJECT-TYPE
+    SYNTAX TestStatus
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Current status of the test system."
+    ::= { testSystem 3 }
+
+testSystemLoad OBJECT-TYPE
+    SYNTAX Gauge32 (0..100)
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Current system load percentage."
+    ::= { testSystem 4 }
+
+-- Network Test Objects
+testNetworkInterfaceCount OBJECT-TYPE
+    SYNTAX Integer32 (0..2147483647)
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Number of network interfaces in the test system."
+    ::= { testNetwork 1 }
+
+testNetworkPacketsReceived OBJECT-TYPE
+    SYNTAX Counter32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Total number of packets received."
+    ::= { testNetwork 2 }
+
+testNetworkPacketsSent OBJECT-TYPE
+    SYNTAX Counter32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Total number of packets sent."
+    ::= { testNetwork 3 }
+
+testNetworkErrors OBJECT-TYPE
+    SYNTAX Counter32
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Total number of network errors."
+    ::= { testNetwork 4 }
+
+-- Hardware Test Objects
+testHardwareTemperature OBJECT-TYPE
+    SYNTAX Integer32 (-273..1000)
+    UNITS "degrees Celsius"
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Current hardware temperature."
+    ::= { testHardware 1 }
+
+testHardwareFanSpeed OBJECT-TYPE
+    SYNTAX Gauge32
+    UNITS "RPM"
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Current fan speed in RPM."
+    ::= { testHardware 2 }
+
+testHardwarePowerStatus OBJECT-TYPE
+    SYNTAX TestStatus
+    MAX-ACCESS read-only
+    STATUS current
+    DESCRIPTION
+        "Current power supply status."
+    ::= { testHardware 3 }
+
+-- Test Notifications
+testTrapPrefix OBJECT IDENTIFIER ::= { testTraps 0 }
+
+testSystemStartup NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName,
+        testSystemUpTime,
+        testSystemStatus
+    }
+    STATUS current
+    DESCRIPTION
+        "Test notification sent when the system starts up."
+    ::= { testTrapPrefix 1 }
+
+testSystemShutdown NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName,
+        testSystemUpTime
+    }
+    STATUS current
+    DESCRIPTION
+        "Test notification sent when the system shuts down."
+    ::= { testTrapPrefix 2 }
+
+testNetworkInterfaceDown NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName,
+        testNetworkInterfaceCount
+    }
+    STATUS current
+    DESCRIPTION
+        "Test notification sent when a network interface goes down."
+    ::= { testTrapPrefix 3 }
+
+testNetworkInterfaceUp NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName,
+        testNetworkInterfaceCount
+    }
+    STATUS current
+    DESCRIPTION
+        "Test notification sent when a network interface comes up."
+    ::= { testTrapPrefix 4 }
+
+testHardwareFailure NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName,
+        testHardwareTemperature,
+        testHardwareFanSpeed,
+        testHardwarePowerStatus
+    }
+    STATUS current
+    DESCRIPTION
+        "Test notification sent when hardware failure is detected."
+    ::= { testTrapPrefix 5 }
+
+testHighLoad NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName,
+        testSystemLoad
+    }
+    STATUS current
+    DESCRIPTION
+        "Test notification sent when system load is high."
+    ::= { testTrapPrefix 6 }
+
+testNetworkCongestion NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName,
+        testNetworkPacketsReceived,
+        testNetworkPacketsSent,
+        testNetworkErrors
+    }
+    STATUS current
+    DESCRIPTION
+        "Test notification sent when network congestion is detected."
+    ::= { testTrapPrefix 7 }
+
+testTemperatureAlert NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName,
+        testHardwareTemperature
+    }
+    STATUS current
+    DESCRIPTION
+        "Test notification sent when temperature exceeds threshold."
+    ::= { testTrapPrefix 8 }
+
+testCustomEvent NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName
+    }
+    STATUS current
+    DESCRIPTION
+        "Custom test notification for general testing purposes."
+    ::= { testTrapPrefix 9 }
+
+testSecurityAlert NOTIFICATION-TYPE
+    OBJECTS {
+        testSystemName,
+        testSystemUpTime
+    }
+    STATUS current
+    DESCRIPTION
+        "Test notification sent for security-related events."
+    ::= { testTrapPrefix 10 }
+
+-- Conformance Information
+testCompliances OBJECT IDENTIFIER ::= { testConformance 1 }
+testGroups      OBJECT IDENTIFIER ::= { testConformance 2 }
+
+testCompliance MODULE-COMPLIANCE
+    STATUS current
+    DESCRIPTION
+        "The compliance statement for entities implementing the TEST-MIB."
+    MODULE
+        MANDATORY-GROUPS {
+            testSystemGroup,
+            testNetworkGroup,
+            testHardwareGroup,
+            testNotificationGroup
+        }
+    ::= { testCompliances 1 }
+
+testSystemGroup OBJECT-GROUP
+    OBJECTS {
+        testSystemName,
+        testSystemUpTime,
+        testSystemStatus,
+        testSystemLoad
+    }
+    STATUS current
+    DESCRIPTION
+        "A collection of objects providing system information."
+    ::= { testGroups 1 }
+
+testNetworkGroup OBJECT-GROUP
+    OBJECTS {
+        testNetworkInterfaceCount,
+        testNetworkPacketsReceived,
+        testNetworkPacketsSent,
+        testNetworkErrors
+    }
+    STATUS current
+    DESCRIPTION
+        "A collection of objects providing network information."
+    ::= { testGroups 2 }
+
+testHardwareGroup OBJECT-GROUP
+    OBJECTS {
+        testHardwareTemperature,
+        testHardwareFanSpeed,
+        testHardwarePowerStatus
+    }
+    STATUS current
+    DESCRIPTION
+        "A collection of objects providing hardware information."
+    ::= { testGroups 3 }
+
+testNotificationGroup NOTIFICATION-GROUP
+    NOTIFICATIONS {
+        testSystemStartup,
+        testSystemShutdown,
+        testNetworkInterfaceDown,
+        testNetworkInterfaceUp,
+        testHardwareFailure,
+        testHighLoad,
+        testNetworkCongestion,
+        testTemperatureAlert,
+        testCustomEvent,
+        testSecurityAlert
+    }
+    STATUS current
+    DESCRIPTION
+        "A collection of test notifications."
+    ::= { testGroups 4 }
+
+END

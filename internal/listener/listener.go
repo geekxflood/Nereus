@@ -417,9 +417,9 @@ func (l *Listener) Start(ctx context.Context) error {
 // Stop stops the SNMP trap listener gracefully.
 func (l *Listener) Stop() error {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 
 	if !l.running {
+		l.mu.Unlock()
 		return nil
 	}
 
@@ -432,6 +432,9 @@ func (l *Listener) Stop() error {
 
 	// Close handler channel to signal workers to stop
 	close(l.handlers)
+
+	// Release the lock before waiting for goroutines to avoid deadlock
+	l.mu.Unlock()
 
 	// Wait for all goroutines to finish
 	l.wg.Wait()

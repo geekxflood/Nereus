@@ -962,20 +962,57 @@ func (m *Manager) ResolveOIDDetailed(oid string) (*OIDInfo, error) {
 
 	m.stats.CacheMisses++
 
-	// Try exact match first
-	if node, found := m.FindNode(oid); found && node.Name != "" {
+	// Try exact match first (inline to avoid nested lock)
+	parts := strings.Split(oid, ".")
+	current := m.oidTree
+
+	for _, part := range parts {
+		if current == nil || current.Children == nil {
+			break
+		}
+		current = current.Children[part]
+	}
+
+	if current != nil && current.Name != "" {
 		m.stats.ExactMatches++
-		info := m.nodeToOIDInfo(node)
+		info := m.nodeToOIDInfo(current)
 		m.cacheResult(oid, info, m.oidCache)
 		return info, nil
 	}
 
-	// Try partial matching if enabled
+	// Try partial matching if enabled (inline to avoid nested lock)
 	if m.config.EnablePartialOID {
-		if info, err := m.resolvePartialOID(oid); err == nil {
-			m.stats.PartialMatches++
-			m.cacheResult(oid, info, m.oidCache)
-			return info, nil
+		parts := strings.Split(oid, ".")
+
+		// Try progressively shorter OIDs
+		for i := len(parts); i > 0; i-- {
+			partialOID := strings.Join(parts[:i], ".")
+
+			// Inline FindNode logic to avoid nested lock
+			partialParts := strings.Split(partialOID, ".")
+			current := m.oidTree
+
+			for _, part := range partialParts {
+				if current == nil || current.Children == nil {
+					break
+				}
+				current = current.Children[part]
+			}
+
+			if current != nil && current.Name != "" {
+				info := m.nodeToOIDInfo(current)
+
+				// Add remaining OID parts as suffix
+				if i < len(parts) {
+					suffix := strings.Join(parts[i:], ".")
+					info.Name = fmt.Sprintf("%s.%s", info.Name, suffix)
+					info.OID = oid // Use original OID
+				}
+
+				m.stats.PartialMatches++
+				m.cacheResult(oid, info, m.oidCache)
+				return info, nil
+			}
 		}
 	}
 

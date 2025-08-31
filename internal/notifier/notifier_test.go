@@ -162,7 +162,7 @@ func createTestEvent() *storage.Event {
 		PDUType:       4,
 		RequestID:     456,
 		TrapOID:       "1.3.6.1.6.3.1.1.5.3",
-		TrapName:      "linkDown",
+		TrapName:      func() *string { s := "linkDown"; return &s }(),
 		Severity:      "major",
 		Status:        "firing",
 		Acknowledged:  false,
@@ -294,11 +294,16 @@ func TestLoadDefaultTemplate(t *testing.T) {
 	// Test template execution
 	event := createTestEvent()
 	data := map[string]any{
-		"ID":            event.ID,
-		"Timestamp":     event.Timestamp.Format(time.RFC3339),
-		"SourceIP":      event.SourceIP,
-		"TrapOID":       event.TrapOID,
-		"TrapName":      event.TrapName,
+		"ID":        event.ID,
+		"Timestamp": event.Timestamp.Format(time.RFC3339),
+		"SourceIP":  event.SourceIP,
+		"TrapOID":   event.TrapOID,
+		"TrapName": func() string {
+			if event.TrapName != nil {
+				return *event.TrapName
+			}
+			return ""
+		}(),
 		"Severity":      event.Severity,
 		"Status":        event.Status,
 		"VarbindsJSON":  event.Varbinds,

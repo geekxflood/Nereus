@@ -42,7 +42,7 @@ var StandardTraps = map[string]TrapDefinition{
 		Name:        "linkDown",
 		Description: "Network interface down",
 		Varbinds: []VarbindTemplate{
-			{OID: "1.3.6.1.2.1.2.2.1.1", Type: "integer", Value: "1"}, // ifIndex
+			{OID: "1.3.6.1.2.1.2.2.1.1", Type: types.TypeInteger, Value: int64(1)}, // ifIndex
 		},
 	},
 	"linkUp": {
@@ -50,7 +50,7 @@ var StandardTraps = map[string]TrapDefinition{
 		Name:        "linkUp",
 		Description: "Network interface up",
 		Varbinds: []VarbindTemplate{
-			{OID: "1.3.6.1.2.1.2.2.1.1", Type: "integer", Value: "1"}, // ifIndex
+			{OID: "1.3.6.1.2.1.2.2.1.1", Type: types.TypeInteger, Value: int64(1)}, // ifIndex
 		},
 	},
 	"authenticationFailure": {
@@ -72,8 +72,8 @@ type TrapDefinition struct {
 // VarbindTemplate defines a varbind template
 type VarbindTemplate struct {
 	OID   string
-	Type  string
-	Value string
+	Type  int
+	Value interface{}
 }
 
 // GenerateStandardTrap generates a standard SNMP trap
@@ -93,13 +93,13 @@ func (g *SNMPTrapGenerator) GenerateTrap(trapOID string, varbindTemplates []Varb
 		// sysUpTime (required for SNMPv2c traps)
 		{
 			OID:   "1.3.6.1.2.1.1.3.0",
-			Type:  "timeticks",
-			Value: fmt.Sprintf("%d", time.Now().Unix()*100), // Convert to centiseconds
+			Type:  types.TypeTimeTicks,
+			Value: uint64(time.Now().Unix() * 100), // Convert to centiseconds
 		},
 		// snmpTrapOID (required for SNMPv2c traps)
 		{
 			OID:   "1.3.6.1.6.3.1.1.4.1.0",
-			Type:  "oid",
+			Type:  types.TypeObjectIdentifier,
 			Value: trapOID,
 		},
 	}
@@ -117,7 +117,7 @@ func (g *SNMPTrapGenerator) GenerateTrap(trapOID string, varbindTemplates []Varb
 		Version:   1, // SNMPv2c
 		Community: g.Community,
 		PDUType:   7, // Trap
-		RequestID: uint32(time.Now().Unix() & 0xFFFFFFFF),
+		RequestID: int32(time.Now().Unix() & 0x7FFFFFFF),
 		Varbinds:  varbinds,
 	}, nil
 }
@@ -128,7 +128,7 @@ func (g *SNMPTrapGenerator) GenerateCustomTrap(trapOID string, customVarbinds ma
 	for oid, value := range customVarbinds {
 		varbindTemplates = append(varbindTemplates, VarbindTemplate{
 			OID:   oid,
-			Type:  "string",
+			Type:  types.TypeOctetString,
 			Value: value,
 		})
 	}
@@ -162,7 +162,7 @@ func (g *SNMPTrapGenerator) GenerateMalformedTrap(malformationType string) (*typ
 		}
 		packet.Varbinds = append(packet.Varbinds, types.Varbind{
 			OID:   "1.3.6.1.4.1.99999.1",
-			Type:  "string",
+			Type:  types.TypeOctetString,
 			Value: string(largeValue),
 		})
 	default:
@@ -218,7 +218,7 @@ func (g *SNMPTrapGenerator) encodePacket(packet *types.SNMPPacket) ([]byte, erro
 
 	// Request ID
 	requestIDBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(requestIDBytes, packet.RequestID)
+	binary.BigEndian.PutUint32(requestIDBytes, uint32(packet.RequestID))
 	result = append(result, 0x02, 0x04)
 	result = append(result, requestIDBytes...)
 
@@ -284,7 +284,7 @@ func (g *SNMPTrapGenerator) GenerateBurstTraps(count int, trapType string, inter
 		}
 
 		// Modify request ID to make each packet unique
-		packet.RequestID = uint32(time.Now().UnixNano() + int64(i))
+		packet.RequestID = int32(time.Now().UnixNano() + int64(i))
 
 		packets = append(packets, packet)
 
@@ -303,7 +303,7 @@ var VendorTraps = map[string]TrapDefinition{
 		Name:        "ciscoConfigManEvent",
 		Description: "Cisco configuration change",
 		Varbinds: []VarbindTemplate{
-			{OID: "1.3.6.1.4.1.9.9.43.1.1.1.1", Type: "string", Value: "config-change"},
+			{OID: "1.3.6.1.4.1.9.9.43.1.1.1.1", Type: types.TypeOctetString, Value: "config-change"},
 		},
 	},
 	"juniperAlarm": {
@@ -311,7 +311,7 @@ var VendorTraps = map[string]TrapDefinition{
 		Name:        "jnxEventTrap",
 		Description: "Juniper alarm event",
 		Varbinds: []VarbindTemplate{
-			{OID: "1.3.6.1.4.1.2636.3.18.1.7.1.2", Type: "string", Value: "MAJOR"},
+			{OID: "1.3.6.1.4.1.2636.3.18.1.7.1.2", Type: types.TypeOctetString, Value: "MAJOR"},
 		},
 	},
 	"hpServerAlert": {
@@ -319,7 +319,7 @@ var VendorTraps = map[string]TrapDefinition{
 		Name:        "cpqHoTrapFlags",
 		Description: "HP server alert",
 		Varbinds: []VarbindTemplate{
-			{OID: "1.3.6.1.4.1.232.11.2.11.1.0", Type: "integer", Value: "3"},
+			{OID: "1.3.6.1.4.1.232.11.2.11.1.0", Type: types.TypeInteger, Value: int64(3)},
 		},
 	},
 }

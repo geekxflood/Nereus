@@ -50,11 +50,11 @@ type Event struct {
 	PDUType       int        `json:"pdu_type" db:"pdu_type"`
 	RequestID     int32      `json:"request_id" db:"request_id"`
 	TrapOID       string     `json:"trap_oid" db:"trap_oid"`
-	TrapName      string     `json:"trap_name" db:"trap_name"`
+	TrapName      *string    `json:"trap_name" db:"trap_name"`
 	Severity      string     `json:"severity" db:"severity"`
 	Status        string     `json:"status" db:"status"`
 	Acknowledged  bool       `json:"acknowledged" db:"acknowledged"`
-	AckBy         string     `json:"ack_by" db:"ack_by"`
+	AckBy         *string    `json:"ack_by" db:"ack_by"`
 	AckTime       *time.Time `json:"ack_time" db:"ack_time"`
 	Count         int        `json:"count" db:"count"`
 	FirstSeen     time.Time  `json:"first_seen" db:"first_seen"`
@@ -63,6 +63,8 @@ type Event struct {
 	Metadata      string     `json:"metadata" db:"metadata"` // JSON encoded
 	Hash          string     `json:"hash" db:"hash"`
 	CorrelationID string     `json:"correlation_id" db:"correlation_id"`
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // GetID returns the event ID (implements EventInterface)
@@ -361,6 +363,12 @@ func (s *Storage) packetToEvent(packet *types.SNMPPacket, sourceIP string, enric
 		}
 	}
 
+	// Convert trapName to pointer
+	var trapNamePtr *string
+	if trapName != "" {
+		trapNamePtr = &trapName
+	}
+
 	event := &Event{
 		Timestamp:    now,
 		SourceIP:     sourceIP,
@@ -369,7 +377,7 @@ func (s *Storage) packetToEvent(packet *types.SNMPPacket, sourceIP string, enric
 		PDUType:      packet.PDUType,
 		RequestID:    packet.RequestID,
 		TrapOID:      trapOID,
-		TrapName:     trapName,
+		TrapName:     trapNamePtr,
 		Severity:     severity,
 		Status:       "open",
 		Acknowledged: false,
@@ -590,7 +598,7 @@ func (s *Storage) QueryEvents(query *EventQuery) ([]*Event, error) {
 			&event.TrapName, &event.Severity, &event.Status, &event.Acknowledged,
 			&event.AckBy, &event.AckTime, &event.Count, &event.FirstSeen,
 			&event.LastSeen, &event.Varbinds, &event.Metadata, &event.Hash,
-			&event.CorrelationID,
+			&event.CorrelationID, &event.CreatedAt, &event.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan event: %w", err)
@@ -613,7 +621,7 @@ func (s *Storage) GetEvent(id int64) (*Event, error) {
 		&event.TrapName, &event.Severity, &event.Status, &event.Acknowledged,
 		&event.AckBy, &event.AckTime, &event.Count, &event.FirstSeen,
 		&event.LastSeen, &event.Varbinds, &event.Metadata, &event.Hash,
-		&event.CorrelationID,
+		&event.CorrelationID, &event.CreatedAt, &event.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {

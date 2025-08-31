@@ -81,9 +81,9 @@ func (ac *AlertConverter) ConvertEvent(event *storage.Event) (*model.Alert, erro
 	}
 
 	// Add trap name if available
-	if event.TrapName != "" {
-		labels["trap_name"] = model.LabelValue(event.TrapName)
-		labels["alertname"] = model.LabelValue(fmt.Sprintf("SNMPTrap_%s", event.TrapName))
+	if event.TrapName != nil && *event.TrapName != "" {
+		labels["trap_name"] = model.LabelValue(*event.TrapName)
+		labels["alertname"] = model.LabelValue(fmt.Sprintf("SNMPTrap_%s", *event.TrapName))
 	}
 
 	// Add correlation ID if available
@@ -97,7 +97,12 @@ func (ac *AlertConverter) ConvertEvent(event *storage.Event) (*model.Alert, erro
 
 	// Create annotations
 	annotations := model.LabelSet{
-		"summary": model.LabelValue(fmt.Sprintf("SNMP trap %s from %s", event.TrapName, event.SourceIP)),
+		"summary": model.LabelValue(fmt.Sprintf("SNMP trap %s from %s", func() string {
+			if event.TrapName != nil {
+				return *event.TrapName
+			}
+			return event.TrapOID
+		}(), event.SourceIP)),
 		"description": model.LabelValue(fmt.Sprintf(
 			"SNMP trap received from %s (community: %s, OID: %s, severity: %s)",
 			event.SourceIP, event.Community, event.TrapOID, event.Severity,
@@ -116,8 +121,8 @@ func (ac *AlertConverter) ConvertEvent(event *storage.Event) (*model.Alert, erro
 	// Add acknowledgment info if acknowledged
 	if event.Acknowledged {
 		annotations["acknowledged"] = "true"
-		if event.AckBy != "" {
-			annotations["acknowledged_by"] = model.LabelValue(event.AckBy)
+		if event.AckBy != nil && *event.AckBy != "" {
+			annotations["acknowledged_by"] = model.LabelValue(*event.AckBy)
 		}
 		if event.AckTime != nil {
 			annotations["acknowledged_at"] = model.LabelValue(event.AckTime.Format(time.RFC3339))
@@ -828,15 +833,20 @@ func (n *Notifier) generatePayload(event *storage.Event, webhook *WebhookConfig)
 func (n *Notifier) renderDefaultTemplate(event *storage.Event) ([]byte, error) {
 	// Prepare template data
 	data := map[string]any{
-		"ID":            event.ID,
-		"Timestamp":     event.Timestamp.Format(time.RFC3339),
-		"SourceIP":      event.SourceIP,
-		"Community":     event.Community,
-		"Version":       event.Version,
-		"PDUType":       event.PDUType,
-		"RequestID":     event.RequestID,
-		"TrapOID":       event.TrapOID,
-		"TrapName":      event.TrapName,
+		"ID":        event.ID,
+		"Timestamp": event.Timestamp.Format(time.RFC3339),
+		"SourceIP":  event.SourceIP,
+		"Community": event.Community,
+		"Version":   event.Version,
+		"PDUType":   event.PDUType,
+		"RequestID": event.RequestID,
+		"TrapOID":   event.TrapOID,
+		"TrapName": func() string {
+			if event.TrapName != nil {
+				return *event.TrapName
+			}
+			return ""
+		}(),
 		"Severity":      event.Severity,
 		"Status":        event.Status,
 		"Acknowledged":  event.Acknowledged,
@@ -975,7 +985,10 @@ func (n *Notifier) getEventFieldValue(event *storage.Event, fieldName string) st
 	case "trap_oid":
 		return event.TrapOID
 	case "trap_name":
-		return event.TrapName
+		if event.TrapName != nil {
+			return *event.TrapName
+		}
+		return ""
 	case "severity":
 		return event.Severity
 	case "status":

@@ -22,7 +22,6 @@ temp/
 # Dependencies
 vendor/
 node_modules/
-mibs/
 
 # IDE and editor files
 # .idea/

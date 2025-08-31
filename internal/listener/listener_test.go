@@ -172,6 +172,9 @@ func TestListenerStartStop(t *testing.T) {
 		t.Fatalf("Failed to start listener: %v", err)
 	}
 
+	// Give the listener a moment to fully start
+	time.Sleep(100 * time.Millisecond)
+
 	// Test running state
 	if !listener.IsRunning() {
 		t.Error("Listener should be running after start")
@@ -205,6 +208,9 @@ func TestListenerDoubleStart(t *testing.T) {
 		t.Fatalf("Failed to start listener: %v", err)
 	}
 	defer listener.Stop()
+
+	// Give the listener a moment to fully start
+	time.Sleep(100 * time.Millisecond)
 
 	// Try to start again
 	err = listener.Start(ctx)
@@ -240,6 +246,9 @@ func TestListenerGetStats(t *testing.T) {
 		t.Fatalf("Failed to start listener: %v", err)
 	}
 	defer listener.Stop()
+
+	// Give the listener a moment to fully start
+	time.Sleep(100 * time.Millisecond)
 
 	stats = listener.GetStats()
 	if stats["running"] != true {
