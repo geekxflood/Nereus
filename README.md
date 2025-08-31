@@ -190,22 +190,34 @@ services:
 
 ```text
 nereus/
-├── cmd/                 # CLI commands
-│   ├── generate.go     # Configuration generation
-│   ├── validate.go     # Configuration validation
-│   └── schemas/        # CUE configuration schemas
-├── internal/
-│   └── helpers/        # Utility functions
-└── main.go            # Application entry point
+├── cmd/                    # CLI commands
+│   ├── generate.go        # Configuration generation
+│   ├── validate.go        # Configuration validation
+│   └── schemas/           # CUE configuration schemas
+├── internal/              # Core application packages
+│   ├── app/              # Application orchestration and lifecycle
+│   ├── correlator/       # Event correlation and deduplication
+│   ├── events/           # Event processing and enrichment
+│   ├── infra/            # Infrastructure (HTTP client, OID resolution, hot reload)
+│   ├── listener/         # SNMP trap listener with validation
+│   ├── metrics/          # Prometheus metrics and monitoring
+│   ├── mib/              # MIB loading, parsing, and SNMP packet parsing
+│   ├── notifier/         # Webhook delivery and alert notifications
+│   ├── storage/          # Database operations and persistence
+│   └── types/            # Common types and data structures
+├── examples/             # Configuration examples
+└── main.go              # Application entry point
 ```
 
 ### Event Flow
 
-1. **Trap Reception**: SNMP traps received
-2. **MIB Parsing**: OIDs parsed using loaded MIB definitions
-3. **Event Registration**: Trap data stored with correlation ID
-4. **Alert Generation**: Webhook notifications sent to configured endpoints
-5. **Resolution Handling**: Resolve traps automatically close related alerts
+1. **Trap Reception**: SNMP listener receives and validates SNMPv2c traps
+2. **Packet Parsing**: SNMP packets parsed using integrated ASN.1 parser
+3. **MIB Resolution**: OIDs resolved to human-readable names using loaded MIB definitions
+4. **Event Processing**: Events enriched with metadata and context
+5. **Correlation**: Events deduplicated and correlated using simplified rule engine
+6. **Storage**: Event data persisted to SQLite database
+7. **Notification**: Webhook alerts sent to configured endpoints with retry logic
 
 ### Dependencies
 

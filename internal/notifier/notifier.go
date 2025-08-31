@@ -1,4 +1,4 @@
-// Package notifier provides simplified notification services focused on Alertmanager integration.
+// Package notifier provides consolidated notification and alert services with webhook delivery and Alertmanager integration.
 package notifier
 
 import (

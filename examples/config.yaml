@@ -20,16 +20,38 @@ logging:
   max_backups: 5 # Number of backup files to keep
   max_age: "30d" # Maximum age of log files
 
-# Hot reload configuration
-reload:
-  enabled: true # Enable hot reload functionality
-  watch_config_file: true # Watch this config file for changes
-  watch_mib_directories: true # Watch MIB directories for changes
-  reload_delay: "2s" # Debounce delay for file changes
-  max_reload_attempts: 3 # Maximum retry attempts on failure
-  reload_timeout: "30s" # Timeout for reload operations
-  preserve_state: true # Preserve application state during reload
-  validate_before_reload: true # Validate configuration before applying
+# Infrastructure configuration (consolidated HTTP client, OID resolution, hot reload)
+infra:
+  # HTTP client configuration
+  client:
+    timeout: "30s" # HTTP request timeout
+    max_retries: 3 # Maximum retry attempts
+    retry_delay: "1s" # Delay between retries
+    max_retry_delay: "30s" # Maximum retry delay (for exponential backoff)
+    exponential_backoff: true # Enable exponential backoff for retries
+    user_agent: "nereus/1.0" # User agent string for HTTP requests
+    enable_http2: true # Enable HTTP/2
+    max_idle_connections: 100 # Maximum idle connections
+    idle_connection_timeout: "90s" # Idle connection timeout
+
+  # OID resolver configuration
+  resolver:
+    cache_enabled: true # Enable OID resolution caching
+    cache_size: 10000 # Maximum number of cached entries
+    cache_expiry: "1h" # Cache entry expiry time
+    enable_partial_oid: true # Enable partial OID matching
+    max_search_depth: 10 # Maximum search depth for OID resolution
+
+  # Hot reload configuration
+  reload:
+    enabled: true # Enable hot reload functionality
+    watch_config_file: true # Watch this config file for changes
+    watch_mib_directories: true # Watch MIB directories for changes
+    reload_delay: "2s" # Debounce delay for file changes
+    max_reload_attempts: 3 # Maximum retry attempts on failure
+    reload_timeout: "30s" # Timeout for reload operations
+    preserve_state: true # Preserve application state during reload
+    validate_before_reload: true # Validate configuration before applying
 
 # Metrics and monitoring (Prometheus integration)
 metrics:
@@ -63,8 +85,6 @@ correlator:
   deduplication_window: "5m" # Time window for deduplication
   correlation_window: "10m" # Time window for correlation
   max_groups: 1000 # Maximum active correlation groups
-  flapping_threshold: 5 # Events needed to detect flapping
-  flapping_window: "2m" # Time window for flapping detection
 
 # Notification configuration
 notifier:
@@ -89,20 +109,25 @@ mib:
   cache_enabled: true # Enable MIB parsing cache
   cache_expiry: "1h" # Cache expiration time
 
-# OID resolver configuration
-resolver:
-  cache_size: 10000 # OID resolution cache size
-  cache_ttl: "1h" # Cache time-to-live
-  enable_reverse_lookup: true # Enable reverse OID lookups
-
-# HTTP client configuration
-client:
-  timeout: "30s" # HTTP request timeout
-  max_idle_conns: 100 # Maximum idle connections
-  max_idle_conns_per_host: 10 # Maximum idle connections per host
-  idle_conn_timeout: "90s" # Idle connection timeout
-  tls_handshake_timeout: "10s" # TLS handshake timeout
-  expect_continue_timeout: "1s" # Expect: 100-continue timeout
+# Legacy configurations (for backward compatibility)
+# Note: These sections are deprecated. Use 'infra' section instead.
+#
+# resolver:
+#   cache_size: 10000
+#   cache_ttl: "1h"
+#   enable_reverse_lookup: true
+#
+# client:
+#   timeout: "30s"
+#   max_idle_conns: 100
+#   max_idle_conns_per_host: 10
+#   idle_conn_timeout: "90s"
+#   tls_handshake_timeout: "10s"
+#
+# reload:
+#   enabled: true
+#   watch_config_file: true
+#   watch_mib_directories: true
 
 # Health check configuration
 health_check:

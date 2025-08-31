@@ -20,17 +20,21 @@ package schemas
 	// MIB configuration for OID parsing
 	mib?: #MIB
 
-	// OID resolution configuration
-	resolver?: #Resolver
-
-	// HTTP client configuration
-	client?: #Client
+	// Infrastructure configuration (HTTP client, OID resolution, hot reload)
+	infra?: #Infrastructure
 
 	// Health check configuration
 	health_check?: #HealthCheck
 
 	// Metrics configuration
 	metrics?: #Metrics
+
+	// Legacy configurations (for backward compatibility)
+	// OID resolution configuration
+	resolver?: #Resolver
+
+	// HTTP client configuration
+	client?: #Client
 
 	// Hot reload configuration
 	reload?: #Reload
@@ -229,18 +233,6 @@ package schemas
 
 	// Maximum events per correlation group
 	max_correlation_events?: int & >=1 | *100
-
-	// Auto-acknowledge correlated events
-	auto_acknowledge?: bool | *false
-
-	// Enable flapping detection
-	enable_flapping?: bool | *false
-
-	// Flapping threshold (events per window)
-	flapping_threshold?: int & >=1 | *5
-
-	// Flapping detection window
-	flapping_window?: string | *"2m"
 }
 
 // Notifier defines the notification configuration
@@ -367,6 +359,84 @@ package schemas
 
 	// Whether to validate MIB files during loading
 	validate?: bool | *true
+}
+
+// Infrastructure defines the consolidated infrastructure configuration
+#Infrastructure: {
+	// HTTP client configuration
+	client?: {
+		// Request timeout
+		timeout?: string | *"30s"
+
+		// Maximum number of retries
+		max_retries?: int & >=0 | *3
+
+		// Delay between retries
+		retry_delay?: string | *"1s"
+
+		// Maximum retry delay (for exponential backoff)
+		max_retry_delay?: string | *"30s"
+
+		// Enable exponential backoff for retries
+		exponential_backoff?: bool | *true
+
+		// User agent string for HTTP requests
+		user_agent?: string | *"nereus/1.0"
+
+		// Enable HTTP/2
+		enable_http2?: bool | *true
+
+		// Maximum idle connections
+		max_idle_connections?: int & >=1 | *100
+
+		// Idle connection timeout
+		idle_connection_timeout?: string | *"90s"
+	}
+
+	// OID resolution configuration
+	resolver?: {
+		// Enable OID resolution caching
+		cache_enabled?: bool | *true
+
+		// Maximum number of cached entries
+		cache_size?: int & >=100 | *10000
+
+		// Cache entry expiry time
+		cache_expiry?: string | *"1h"
+
+		// Enable partial OID matching
+		enable_partial_oid?: bool | *true
+
+		// Maximum search depth for OID resolution
+		max_search_depth?: int & >=1 | *10
+	}
+
+	// Hot reload configuration
+	reload?: {
+		// Enable hot reload functionality
+		enabled?: bool | *true
+
+		// Watch configuration file for changes
+		watch_config_file?: bool | *true
+
+		// Watch MIB directories for changes
+		watch_mib_directories?: bool | *true
+
+		// Delay before processing reload events (debounce)
+		reload_delay?: string | *"2s"
+
+		// Maximum number of reload attempts
+		max_reload_attempts?: int & >=1 | *3
+
+		// Timeout for reload operations
+		reload_timeout?: string | *"30s"
+
+		// Preserve application state during reload
+		preserve_state?: bool | *true
+
+		// Validate configuration before applying reload
+		validate_before_reload?: bool | *true
+	}
 }
 
 // Resolver defines the OID resolution configuration

@@ -31,11 +31,6 @@ type CorrelatorConfig struct {
 	CorrelationWindow    time.Duration     `json:"correlation_window"`
 	MaxCorrelationEvents int               `json:"max_correlation_events"`
 	SeverityMapping      map[string]string `json:"severity_mapping"`
-	AutoAcknowledge      bool              `json:"auto_acknowledge"`
-	AutoAckThreshold     int               `json:"auto_ack_threshold"`
-	EnableFlapping       bool              `json:"enable_flapping"`
-	FlappingThreshold    int               `json:"flapping_threshold"`
-	FlappingWindow       time.Duration     `json:"flapping_window"`
 }
 
 // DefaultCorrelatorConfig returns a default correlator configuration
@@ -53,11 +48,6 @@ func DefaultCorrelatorConfig() *CorrelatorConfig {
 			"1.3.6.1.6.3.1.1.5.4": "info",     // linkUp
 			"1.3.6.1.6.3.1.1.5.5": "major",    // authenticationFailure
 		},
-		AutoAcknowledge:   false,
-		AutoAckThreshold:  10,
-		EnableFlapping:    true,
-		FlappingThreshold: 5,
-		FlappingWindow:    2 * time.Minute,
 	}
 }
 
@@ -111,22 +101,19 @@ type CorrelatorStats struct {
 	EventsSuppressed   int64            `json:"events_suppressed"`
 	ActiveGroups       int              `json:"active_groups"`
 	RulesMatched       map[string]int64 `json:"rules_matched"`
-	FlappingEvents     int64            `json:"flapping_events"`
-	AutoAcknowledged   int64            `json:"auto_acknowledged"`
 	ProcessingTime     time.Duration    `json:"processing_time"`
 	AverageGroupSize   float64          `json:"average_group_size"`
 }
 
 // Correlator provides event correlation and deduplication services
 type Correlator struct {
-	config        *CorrelatorConfig
-	storage       StorageInterface
-	rules         map[string]*CorrelationRule
-	groups        map[string]*EventGroup
-	recentEvents  map[string]*RecentEvent
-	flappingState map[string]*FlappingState
-	mu            sync.RWMutex
-	stats         *CorrelatorStats
+	config       *CorrelatorConfig
+	storage      StorageInterface
+	rules        map[string]*CorrelationRule
+	groups       map[string]*EventGroup
+	recentEvents map[string]*RecentEvent
+	mu           sync.RWMutex
+	stats        *CorrelatorStats
 }
 
 // RecentEvent tracks recent events for deduplication
@@ -136,14 +123,6 @@ type RecentEvent struct {
 	FirstSeen time.Time `json:"first_seen"`
 	LastSeen  time.Time `json:"last_seen"`
 	EventID   int64     `json:"event_id"`
-}
-
-// FlappingState tracks flapping detection for events
-type FlappingState struct {
-	Count      int       `json:"count"`
-	FirstSeen  time.Time `json:"first_seen"`
-	LastSeen   time.Time `json:"last_seen"`
-	Suppressed bool      `json:"suppressed"`
 }
 
 // NewCorrelator creates a new event correlator
@@ -175,13 +154,12 @@ func NewCorrelator(cfg config.Provider, storage StorageInterface) (*Correlator, 
 	}
 
 	correlator := &Correlator{
-		config:        correlatorConfig,
-		storage:       storage,
-		rules:         make(map[string]*CorrelationRule),
-		groups:        make(map[string]*EventGroup),
-		recentEvents:  make(map[string]*RecentEvent),
-		flappingState: make(map[string]*FlappingState),
-		stats:         &CorrelatorStats{RulesMatched: make(map[string]int64)},
+		config:       correlatorConfig,
+		storage:      storage,
+		rules:        make(map[string]*CorrelationRule),
+		groups:       make(map[string]*EventGroup),
+		recentEvents: make(map[string]*RecentEvent),
+		stats:        &CorrelatorStats{RulesMatched: make(map[string]int64)},
 	}
 
 	// Load default rules
@@ -217,17 +195,7 @@ func (c *Correlator) ProcessEvent(packet *types.SNMPPacket, sourceIP string, enr
 		}
 	}
 
-	// Check for flapping
-	if c.config.EnableFlapping {
-		if c.checkFlapping(eventHash) {
-			c.stats.FlappingEvents++
-			enrichedData["is_flapping"] = true
-			enrichedData["suppressed"] = true
-
-			c.stats.ProcessingTime += time.Since(startTime)
-			return enrichedData, nil
-		}
-	}
+	// Flapping detection removed for simplification
 
 	// Apply severity mapping
 	c.applySeverityMapping(packet, enrichedData)
@@ -289,40 +257,6 @@ func (c *Correlator) trackRecentEvent(eventHash string) {
 		FirstSeen: now,
 		LastSeen:  now,
 	}
-}
-
-// checkFlapping checks if an event is flapping
-func (c *Correlator) checkFlapping(eventHash string) bool {
-	now := time.Now()
-
-	if state, exists := c.flappingState[eventHash]; exists {
-		// Check if within flapping window
-		if now.Sub(state.FirstSeen) <= c.config.FlappingWindow {
-			state.Count++
-			state.LastSeen = now
-
-			// Check if threshold exceeded
-			if state.Count >= c.config.FlappingThreshold && !state.Suppressed {
-				state.Suppressed = true
-				return true
-			}
-
-			return state.Suppressed
-		} else {
-			// Reset flapping state
-			delete(c.flappingState, eventHash)
-		}
-	}
-
-	// Track new flapping state
-	c.flappingState[eventHash] = &FlappingState{
-		Count:      1,
-		FirstSeen:  now,
-		LastSeen:   now,
-		Suppressed: false,
-	}
-
-	return false
 }
 
 // applySeverityMapping applies severity mapping based on trap OID
@@ -436,9 +370,6 @@ func (c *Correlator) executeRuleActions(rule *CorrelationRule, packet *types.SNM
 		case "suppress":
 			enrichedData["suppressed"] = true
 			c.stats.EventsSuppressed++
-		case "acknowledge":
-			enrichedData["auto_acknowledged"] = true
-			c.stats.AutoAcknowledged++
 		}
 	}
 }
@@ -649,12 +580,7 @@ func (c *Correlator) CleanupExpiredGroups() {
 		}
 	}
 
-	// Cleanup flapping state
-	for eventHash, state := range c.flappingState {
-		if now.Sub(state.LastSeen) > c.config.FlappingWindow {
-			delete(c.flappingState, eventHash)
-		}
-	}
+	// Flapping state cleanup removed for simplification
 }
 
 // GetStats returns correlator statistics
@@ -685,16 +611,6 @@ func (c *Correlator) GetRecentEvents() map[string]*RecentEvent {
 	recent := make(map[string]*RecentEvent)
 	maps.Copy(recent, c.recentEvents)
 	return recent
-}
-
-// GetFlappingState returns flapping state for debugging
-func (c *Correlator) GetFlappingState() map[string]*FlappingState {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	flapping := make(map[string]*FlappingState)
-	maps.Copy(flapping, c.flappingState)
-	return flapping
 }
 
 // UpdateConfig updates the correlator configuration

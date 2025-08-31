@@ -9,13 +9,13 @@ This document defines development guidelines and rules for the Nereus SNMPv2c tr
 ## Architecture & Design
 
 ### Package Structure
-- **Always create new internal packages** for new features rather than adding files to existing packages
-- **Maintain clear separation of concerns** between packages: `listener` (SNMP), `storage` (persistence), `correlator` (event logic), `notifier` (webhooks), `metrics` (monitoring)
+- **Use consolidated packages** for related functionality: `mib` (MIB loading + SNMP parsing), `infra` (HTTP client + OID resolution + hot reload), `listener` (SNMP + validation), `notifier` (webhooks + alerts)
+- **Maintain clear separation of concerns** between packages: `listener` (SNMP), `storage` (persistence), `correlator` (simplified event logic), `notifier` (webhooks), `metrics` (monitoring), `events` (processing), `mib` (parsing), `infra` (infrastructure)
 - **Use interfaces for component integration** - define clear interfaces like `ListenerInterface`, `StorageInterface` for testability and modularity
 - **Follow dependency injection patterns** - components should receive their dependencies via constructors, not create them internally
 
 ### Component Integration
-- **Initialize components in dependency order** in the main application: logging → metrics → storage → correlator → processor → listener
+- **Initialize components in dependency order** in the main application: logging → metrics → mib → infra → storage → correlator → notifier → events → listener
 - **Use the application context** (`app.ctx`) for graceful shutdown coordination across all components
 - **Implement proper lifecycle management** - all components must support Start(), Stop(), and health checking
 
@@ -193,7 +193,7 @@ This document defines development guidelines and rules for the Nereus SNMPv2c tr
 
 - **Use time-based windows** for correlation with configurable durations
 - **Implement deduplication** using event fingerprints (source IP, trap OID, key varbinds)
-- **Handle flapping detection** with configurable thresholds and time windows
+- **Use simplified correlation rules** focusing on essential field matching operations
 - **Clean up correlation groups** when they become inactive
 
 ## Webhook & Notification System

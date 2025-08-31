@@ -1,4 +1,4 @@
-// Package listener provides SNMP trap listening functionality.
+// Package listener provides SNMP trap listening and validation functionality.
 package listener
 
 import (
