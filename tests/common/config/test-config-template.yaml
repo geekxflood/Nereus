@@ -1,0 +1,265 @@
+# Nereus Test Configuration Template
+# This template provides a comprehensive configuration for testing scenarios
+
+# Application Configuration
+app:
+  name: "nereus-test"
+  log_level: "debug"
+  environment: "test"
+
+# Logging Configuration
+logging:
+  level: "debug"
+  format: "json"
+  output: "stdout"
+  file_rotation:
+    enabled: false
+
+# Metrics Configuration
+metrics:
+  enabled: true
+  listen_address: ":9091"  # Different port for tests
+  metrics_path: "/metrics"
+  collection_interval: "10s"
+  system_metrics:
+    enabled: true
+    interval: "30s"
+
+# SNMP Server Configuration
+server:
+  host: "127.0.0.1"
+  port: 1162  # Non-privileged port for tests
+  community: "public"
+  max_handlers: 10
+  buffer_size: 8192
+  read_timeout: "10s"
+  write_timeout: "10s"
+
+# SNMP Listener Configuration
+listener:
+  bind_address: "127.0.0.1:1162"
+  max_packet_size: 65507
+  read_timeout: "10s"
+  workers: 2  # Reduced for test environment
+  buffer_size: 100
+  queue_size: 1000
+
+# Storage Configuration
+storage:
+  enabled: true
+  driver: "sqlite"
+  connection: "test-data/nereus-test.db"  # Will be replaced by test setup
+  max_connections: 10
+  connection_timeout: "30s"
+  batch_size: 100
+  batch_timeout: "5s"
+  retention_days: 7  # Shorter retention for tests
+  cleanup_interval: "1h"
+  auto_migrate: true
+
+# Event Processing Configuration
+events:
+  enable_enrichment: true
+  enable_correlation: true
+  enable_storage: true
+  enable_notification: false  # Disabled by default for tests
+  processing_timeout: "30s"
+  max_queue_size: 1000
+  workers: 2
+
+# MIB Configuration
+mib:
+  directories:
+    - "tests/common/fixtures/mibs"  # Test MIB directory
+    - "/usr/share/snmp/mibs"        # System MIBs if available
+  file_extensions:
+    - ".mib"
+    - ".txt"
+    - ".my"
+  max_file_size: "10MB"
+  enable_hot_reload: false  # Disabled for test stability
+  reload_interval: "5m"
+  cache_enabled: true
+  cache_expiry: "30m"
+  validation_enabled: false  # Disabled for faster tests
+  preload_standard_mibs: true
+
+# Correlation Configuration
+correlation:
+  enabled: true
+  time_window: "5m"
+  max_group_size: 100
+  cleanup_interval: "10m"
+  rules:
+    - name: "interface_flapping"
+      description: "Detect interface flapping"
+      conditions:
+        - field: "trap_oid"
+          operator: "in"
+          values: ["1.3.6.1.6.3.1.1.5.3", "1.3.6.1.6.3.1.1.5.4"]
+        - field: "source_ip"
+          operator: "equals"
+          value: "same"
+      threshold: 3
+      time_window: "2m"
+    - name: "system_restart"
+      description: "Detect system restart events"
+      conditions:
+        - field: "trap_oid"
+          operator: "in"
+          values: ["1.3.6.1.6.3.1.1.5.1", "1.3.6.1.6.3.1.1.5.2"]
+      threshold: 1
+      time_window: "1m"
+
+# Notification Configuration
+notification:
+  enabled: false  # Disabled by default for tests
+  default_severity: "info"
+  rate_limiting:
+    enabled: true
+    max_per_minute: 60
+    burst_size: 10
+  
+  webhooks:
+    - name: "test-webhook"
+      url: "http://localhost:8080/webhook"
+      enabled: false
+      method: "POST"
+      timeout: "10s"
+      retry_attempts: 3
+      retry_delay: "5s"
+      headers:
+        Content-Type: "application/json"
+        User-Agent: "Nereus-Test/1.0"
+      template: |
+        {
+          "timestamp": "{{ .Timestamp }}",
+          "source": "{{ .SourceIP }}",
+          "trap_oid": "{{ .TrapOID }}",
+          "trap_name": "{{ .TrapName }}",
+          "severity": "{{ .Severity }}",
+          "message": "SNMP trap received from {{ .SourceIP }}: {{ .TrapName }}",
+          "varbinds": {{ .Varbinds | toJson }}
+        }
+
+# Health Check Configuration
+health:
+  enabled: true
+  listen_address: ":9091"
+  endpoint: "/health"
+  timeout: "5s"
+  checks:
+    - name: "database"
+      enabled: true
+      timeout: "3s"
+    - name: "mib_manager"
+      enabled: true
+      timeout: "2s"
+    - name: "listener"
+      enabled: true
+      timeout: "2s"
+
+# Performance Configuration
+performance:
+  max_memory_mb: 512  # Limited for test environment
+  gc_percent: 100
+  max_goroutines: 1000
+  profiling:
+    enabled: false  # Enable for performance tests
+    cpu_profile: false
+    memory_profile: false
+    block_profile: false
+    mutex_profile: false
+
+# Security Configuration
+security:
+  community_validation:
+    enabled: true
+    strict_mode: false  # Relaxed for tests
+  rate_limiting:
+    enabled: true
+    max_packets_per_second: 1000
+    burst_size: 100
+    cleanup_interval: "1m"
+  input_validation:
+    enabled: true
+    max_packet_size: 65507
+    max_varbinds: 100
+    max_oid_length: 128
+    max_value_length: 1024
+
+# Development Configuration
+development:
+  debug_mode: true
+  verbose_logging: true
+  enable_pprof: false  # Enable for debugging
+  pprof_address: ":6060"
+  enable_tracing: false
+  trace_sample_rate: 0.1
+
+# Test-Specific Configuration
+test:
+  # Test environment settings
+  environment: "test"
+  cleanup_on_exit: true
+  temp_directory: "/tmp/nereus-test"
+  
+  # Test data configuration
+  generate_test_data: false
+  test_data_size: 100
+  
+  # Mock services
+  mock_webhooks: true
+  mock_external_services: true
+  
+  # Test timeouts
+  startup_timeout: "30s"
+  shutdown_timeout: "10s"
+  test_timeout: "300s"
+  
+  # Test ports (non-privileged)
+  snmp_port: 1162
+  metrics_port: 9091
+  health_port: 9091
+  webhook_port: 8080
+  
+  # Test database
+  database_path: "test-data/nereus-test.db"
+  reset_database: true
+  
+  # Test MIBs
+  mib_directory: "tests/common/fixtures/mibs"
+  load_test_mibs: true
+  
+  # Performance test settings
+  load_test:
+    duration: "60s"
+    concurrent_users: 10
+    ramp_up_time: "10s"
+    trap_rate: 100  # traps per second
+  
+  # Chaos test settings
+  chaos_test:
+    enabled: false
+    failure_rate: 0.1
+    network_delay: "100ms"
+    packet_loss: 0.05
+  
+  # Security test settings
+  security_test:
+    test_malformed_packets: true
+    test_injection_attacks: true
+    test_dos_attacks: false  # Disabled by default
+    max_attack_duration: "30s"
+
+# Feature Flags
+features:
+  experimental_features: false
+  beta_features: false
+  legacy_support: true
+  
+  # Specific feature toggles
+  enable_snmpv3: false  # Not supported yet
+  enable_clustering: false
+  enable_encryption: false
+  enable_compression: false

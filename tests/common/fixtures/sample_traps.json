@@ -1,0 +1,388 @@
+{
+  "standard_traps": {
+    "coldStart": {
+      "oid": "1.3.6.1.6.3.1.1.5.1",
+      "name": "coldStart",
+      "description": "A coldStart trap signifies that the SNMP entity, supporting a notification originator application, is reinitializing itself and that its configuration may have been altered.",
+      "severity": "info",
+      "category": "system",
+      "varbinds": [
+        {
+          "oid": "1.3.6.1.2.1.1.3.0",
+          "name": "sysUpTime",
+          "type": "timeticks",
+          "value": "0"
+        }
+      ]
+    },
+    "warmStart": {
+      "oid": "1.3.6.1.6.3.1.1.5.2",
+      "name": "warmStart",
+      "description": "A warmStart trap signifies that the SNMP entity, supporting a notification originator application, is reinitializing itself such that its configuration is unaltered.",
+      "severity": "info",
+      "category": "system",
+      "varbinds": [
+        {
+          "oid": "1.3.6.1.2.1.1.3.0",
+          "name": "sysUpTime",
+          "type": "timeticks",
+          "value": "12345"
+        }
+      ]
+    },
+    "linkDown": {
+      "oid": "1.3.6.1.6.3.1.1.5.3",
+      "name": "linkDown",
+      "description": "A linkDown trap signifies that the SNMP entity, acting in an agent role, has detected that the ifOperStatus object for one of its communication links left the up state and transitioned into some other state.",
+      "severity": "warning",
+      "category": "network",
+      "varbinds": [
+        {
+          "oid": "1.3.6.1.2.1.1.3.0",
+          "name": "sysUpTime",
+          "type": "timeticks",
+          "value": "12345"
+        },
+        {
+          "oid": "1.3.6.1.2.1.2.2.1.1",
+          "name": "ifIndex",
+          "type": "integer",
+          "value": "1"
+        },
+        {
+          "oid": "1.3.6.1.2.1.2.2.1.7",
+          "name": "ifAdminStatus",
+          "type": "integer",
+          "value": "1"
+        },
+        {
+          "oid": "1.3.6.1.2.1.2.2.1.8",
+          "name": "ifOperStatus",
+          "type": "integer",
+          "value": "2"
+        }
+      ]
+    },
+    "linkUp": {
+      "oid": "1.3.6.1.6.3.1.1.5.4",
+      "name": "linkUp",
+      "description": "A linkUp trap signifies that the SNMP entity, acting in an agent role, has detected that the ifOperStatus object for one of its communication links left some failure state and transitioned into the up state.",
+      "severity": "info",
+      "category": "network",
+      "varbinds": [
+        {
+          "oid": "1.3.6.1.2.1.1.3.0",
+          "name": "sysUpTime",
+          "type": "timeticks",
+          "value": "12345"
+        },
+        {
+          "oid": "1.3.6.1.2.1.2.2.1.1",
+          "name": "ifIndex",
+          "type": "integer",
+          "value": "1"
+        },
+        {
+          "oid": "1.3.6.1.2.1.2.2.1.7",
+          "name": "ifAdminStatus",
+          "type": "integer",
+          "value": "1"
+        },
+        {
+          "oid": "1.3.6.1.2.1.2.2.1.8",
+          "name": "ifOperStatus",
+          "type": "integer",
+          "value": "1"
+        }
+      ]
+    },
+    "authenticationFailure": {
+      "oid": "1.3.6.1.6.3.1.1.5.5",
+      "name": "authenticationFailure",
+      "description": "An authenticationFailure trap signifies that the SNMP entity has received a protocol message that is not properly authenticated.",
+      "severity": "error",
+      "category": "security",
+      "varbinds": [
+        {
+          "oid": "1.3.6.1.2.1.1.3.0",
+          "name": "sysUpTime",
+          "type": "timeticks",
+          "value": "12345"
+        }
+      ]
+    }
+  },
+  "vendor_traps": {
+    "cisco": {
+      "configChange": {
+        "oid": "1.3.6.1.4.1.9.9.43.1.1.1",
+        "name": "ciscoConfigManEvent",
+        "description": "Cisco configuration management event",
+        "severity": "info",
+        "category": "configuration",
+        "vendor": "Cisco",
+        "varbinds": [
+          {
+            "oid": "1.3.6.1.2.1.1.3.0",
+            "name": "sysUpTime",
+            "type": "timeticks",
+            "value": "12345"
+          },
+          {
+            "oid": "1.3.6.1.4.1.9.9.43.1.1.1.1",
+            "name": "ccmHistoryEventEntry",
+            "type": "string",
+            "value": "Configuration changed by admin"
+          }
+        ]
+      },
+      "fanFailure": {
+        "oid": "1.3.6.1.4.1.9.9.13.3.0.1",
+        "name": "ciscoEnvMonFanNotification",
+        "description": "Cisco environmental monitoring fan failure",
+        "severity": "critical",
+        "category": "hardware",
+        "vendor": "Cisco",
+        "varbinds": [
+          {
+            "oid": "1.3.6.1.2.1.1.3.0",
+            "name": "sysUpTime",
+            "type": "timeticks",
+            "value": "12345"
+          },
+          {
+            "oid": "1.3.6.1.4.1.9.9.13.1.4.1.2",
+            "name": "ciscoEnvMonFanStatusDescr",
+            "type": "string",
+            "value": "Fan 1"
+          },
+          {
+            "oid": "1.3.6.1.4.1.9.9.13.1.4.1.3",
+            "name": "ciscoEnvMonFanState",
+            "type": "integer",
+            "value": "3"
+          }
+        ]
+      }
+    },
+    "juniper": {
+      "alarmSet": {
+        "oid": "1.3.6.1.4.1.2636.4.5.0.1",
+        "name": "jnxEventTrap",
+        "description": "Juniper alarm set event",
+        "severity": "warning",
+        "category": "alarm",
+        "vendor": "Juniper",
+        "varbinds": [
+          {
+            "oid": "1.3.6.1.2.1.1.3.0",
+            "name": "sysUpTime",
+            "type": "timeticks",
+            "value": "12345"
+          },
+          {
+            "oid": "1.3.6.1.4.1.2636.3.18.1.7.1.2",
+            "name": "jnxEventSeverity",
+            "type": "string",
+            "value": "MAJOR"
+          },
+          {
+            "oid": "1.3.6.1.4.1.2636.3.18.1.7.1.1",
+            "name": "jnxEventDate",
+            "type": "string",
+            "value": "2024-01-01 12:00:00"
+          }
+        ]
+      },
+      "chassisTemperature": {
+        "oid": "1.3.6.1.4.1.2636.4.5.0.2",
+        "name": "jnxChassisTemperatureEvent",
+        "description": "Juniper chassis temperature event",
+        "severity": "warning",
+        "category": "environmental",
+        "vendor": "Juniper",
+        "varbinds": [
+          {
+            "oid": "1.3.6.1.2.1.1.3.0",
+            "name": "sysUpTime",
+            "type": "timeticks",
+            "value": "12345"
+          },
+          {
+            "oid": "1.3.6.1.4.1.2636.3.1.13.1.7",
+            "name": "jnxOperatingTemp",
+            "type": "integer",
+            "value": "75"
+          }
+        ]
+      }
+    },
+    "hp": {
+      "serverAlert": {
+        "oid": "1.3.6.1.4.1.232.0.136006144",
+        "name": "cpqHoTrapFlags",
+        "description": "HP server alert",
+        "severity": "critical",
+        "category": "hardware",
+        "vendor": "HP",
+        "varbinds": [
+          {
+            "oid": "1.3.6.1.2.1.1.3.0",
+            "name": "sysUpTime",
+            "type": "timeticks",
+            "value": "12345"
+          },
+          {
+            "oid": "1.3.6.1.4.1.232.11.2.11.1.0",
+            "name": "cpqHoTrapFlags",
+            "type": "integer",
+            "value": "3"
+          }
+        ]
+      }
+    },
+    "cyberpower": {
+      "upsOnBattery": {
+        "oid": "1.3.6.1.4.1.3808.1.1.1.5",
+        "name": "upsOnBattery",
+        "description": "CyberPower UPS switched to battery power",
+        "severity": "warning",
+        "category": "power",
+        "vendor": "CyberPower",
+        "varbinds": [
+          {
+            "oid": "1.3.6.1.2.1.1.3.0",
+            "name": "sysUpTime",
+            "type": "timeticks",
+            "value": "12345"
+          },
+          {
+            "oid": "1.3.6.1.4.1.3808.1.1.1.2.1.1.0",
+            "name": "upsEstimatedMinutesRemaining",
+            "type": "integer",
+            "value": "30"
+          },
+          {
+            "oid": "1.3.6.1.4.1.3808.1.1.1.2.2.1.0",
+            "name": "upsEstimatedChargeRemaining",
+            "type": "integer",
+            "value": "75"
+          }
+        ]
+      },
+      "upsPowerRestored": {
+        "oid": "1.3.6.1.4.1.3808.1.1.1.6",
+        "name": "upsPowerRestored",
+        "description": "CyberPower UPS power restored from mains",
+        "severity": "info",
+        "category": "power",
+        "vendor": "CyberPower",
+        "varbinds": [
+          {
+            "oid": "1.3.6.1.2.1.1.3.0",
+            "name": "sysUpTime",
+            "type": "timeticks",
+            "value": "12345"
+          },
+          {
+            "oid": "1.3.6.1.4.1.3808.1.1.1.3.2.1.0",
+            "name": "upsInputVoltage",
+            "type": "integer",
+            "value": "230"
+          }
+        ]
+      }
+    }
+  },
+  "test_scenarios": {
+    "high_volume": {
+      "description": "High volume trap scenario for load testing",
+      "trap_count": 1000,
+      "interval_ms": 10,
+      "trap_types": ["coldStart", "warmStart", "linkDown", "linkUp"]
+    },
+    "burst": {
+      "description": "Burst scenario with rapid trap generation",
+      "trap_count": 100,
+      "interval_ms": 1,
+      "trap_types": ["authenticationFailure"]
+    },
+    "mixed_vendors": {
+      "description": "Mixed vendor trap scenario",
+      "trap_count": 50,
+      "interval_ms": 100,
+      "trap_types": [
+        "cisco.configChange",
+        "juniper.alarmSet",
+        "hp.serverAlert",
+        "cyberpower.upsOnBattery"
+      ]
+    },
+    "correlation_test": {
+      "description": "Scenario for testing event correlation",
+      "sequences": [
+        {
+          "description": "Interface flapping",
+          "traps": [
+            {"type": "linkDown", "delay_ms": 0},
+            {"type": "linkUp", "delay_ms": 1000},
+            {"type": "linkDown", "delay_ms": 2000},
+            {"type": "linkUp", "delay_ms": 3000}
+          ]
+        },
+        {
+          "description": "UPS power cycle",
+          "traps": [
+            {"type": "cyberpower.upsOnBattery", "delay_ms": 0},
+            {"type": "cyberpower.upsPowerRestored", "delay_ms": 5000}
+          ]
+        }
+      ]
+    }
+  },
+  "malformed_packets": {
+    "invalid_version": {
+      "description": "Packet with invalid SNMP version",
+      "modifications": {
+        "version": 99
+      }
+    },
+    "empty_community": {
+      "description": "Packet with empty community string",
+      "modifications": {
+        "community": ""
+      }
+    },
+    "invalid_pdu_type": {
+      "description": "Packet with invalid PDU type",
+      "modifications": {
+        "pdu_type": 99
+      }
+    },
+    "no_varbinds": {
+      "description": "Packet with no varbinds",
+      "modifications": {
+        "varbinds": []
+      }
+    },
+    "invalid_oid": {
+      "description": "Packet with malformed OID",
+      "modifications": {
+        "varbinds": [
+          {
+            "oid": "invalid.oid.format",
+            "type": "string",
+            "value": "test"
+          }
+        ]
+      }
+    },
+    "oversized_packet": {
+      "description": "Packet exceeding maximum size",
+      "modifications": {
+        "oversized_value": true,
+        "size_bytes": 100000
+      }
+    }
+  }
+}
