@@ -305,16 +305,20 @@ func (v *PacketValidator) validateTimestamp(timestamp time.Time) error {
 	return nil
 }
 
+// TrapCallback is a function type for handling processed traps
+type TrapCallback func(packet *types.SNMPPacket, sourceIP string)
+
 // Listener represents an SNMP trap listener that receives and processes SNMP traps.
 type Listener struct {
-	config    config.Provider
-	conn      *net.UDPConn
-	handlers  chan *TrapHandler
-	validator *PacketValidator
-	stats     *types.ListenerStats
-	wg        sync.WaitGroup
-	mu        sync.RWMutex
-	running   bool
+	config       config.Provider
+	conn         *net.UDPConn
+	handlers     chan *TrapHandler
+	validator    *PacketValidator
+	stats        *types.ListenerStats
+	trapCallback TrapCallback
+	wg           sync.WaitGroup
+	mu           sync.RWMutex
+	running      bool
 }
 
 // TrapHandler represents a handler for processing individual SNMP traps.
@@ -442,6 +446,13 @@ func (l *Listener) IsRunning() bool {
 	return l.running
 }
 
+// SetTrapCallback sets the callback function for processed traps
+func (l *Listener) SetTrapCallback(callback TrapCallback) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.trapCallback = callback
+}
+
 // listen is the main listening loop that receives UDP packets.
 func (l *Listener) listen(ctx context.Context) {
 	defer l.wg.Done()
@@ -555,8 +566,10 @@ func (l *Listener) processTrap(handler *TrapHandler) {
 	// Set parsed packet in handler
 	handler.Packet = packet
 
-	// TODO: Forward to event processing system
-	// For now, this is a placeholder for the actual trap processing logic
+	// Forward to event processing system via callback if available
+	if l.trapCallback != nil {
+		l.trapCallback(packet, sourceAddr)
+	}
 }
 
 // parseSNMPPacket parses raw SNMP packet data into an SNMPPacket structure.

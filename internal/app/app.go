@@ -489,14 +489,13 @@ type IntegratedListener struct {
 
 // Start starts the integrated listener with trap processing
 func (il *IntegratedListener) Start() error {
+	// Set up the trap callback to forward to our event processing
+	il.Listener.SetTrapCallback(il.application.handleTrap)
+
 	// Start the base listener with our context
 	if err := il.Listener.Start(il.application.ctx); err != nil {
 		return err
 	}
-
-	// Start our trap processing integration
-	il.application.wg.Add(1)
-	go il.trapProcessor()
 
 	return nil
 }
@@ -506,33 +505,7 @@ func (il *IntegratedListener) Stop() error {
 	return il.Listener.Stop()
 }
 
-// trapProcessor processes traps from the listener and forwards them to event processing
-func (il *IntegratedListener) trapProcessor() {
-	defer il.application.wg.Done()
-
-	// This is a simplified integration approach
-	// In a real implementation, we would modify the listener to expose a channel
-	// or callback mechanism for processed traps
-
-	// For now, we'll use a ticker to check for processed traps
-	// This is not ideal but works for the integration demo
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-il.application.ctx.Done():
-			return
-		case <-ticker.C:
-			// In a real implementation, we would get actual trap data here
-			// For now, this is just a placeholder to show the integration pattern
-		}
-	}
-}
-
-// handleTrap handles incoming SNMP trap packets
-// TODO: This method is currently unused but will be integrated with the listener
-// when the listener is updated to support callback-based trap processing
+// handleTrap handles incoming SNMP trap packets from the listener
 func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
 	startTime := time.Now()
 
@@ -552,8 +525,10 @@ func (a *Application) handleTrap(packet *types.SNMPPacket, sourceIP string) {
 		"pdu_type", packet.PDUType)
 
 	// Process the trap through the event processor
+	a.logger.Debug("Starting event processing", "varbinds_count", len(packet.Varbinds))
 	result, err := a.processor.ProcessEventSync(packet, sourceIP)
 	processingTime := time.Since(startTime)
+	a.logger.Debug("Event processing completed", "success", result != nil && result.Success, "error", err)
 
 	if err != nil {
 		// Update metrics

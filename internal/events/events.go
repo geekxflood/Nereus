@@ -295,45 +295,66 @@ func (p *EventProcessor) processEventInternal(packet *types.SNMPPacket, sourceIP
 
 	// Step 1: Enrichment
 	if p.config.EnableEnrichment && p.resolver != nil {
+		// Debug: Log enrichment start
+		fmt.Printf("DEBUG: Starting enrichment step\n")
 		if err := p.enrichEvent(packet, enrichedData); err != nil {
+			fmt.Printf("DEBUG: Enrichment failed: %v\n", err)
 			return &EventResult{
 				Success: false,
 				Error:   fmt.Errorf("enrichment failed: %w", err),
 			}
 		}
+		fmt.Printf("DEBUG: Enrichment completed successfully\n")
 		p.mu.Lock()
 		p.stats.EventsEnriched++
 		p.mu.Unlock()
+	} else {
+		fmt.Printf("DEBUG: Enrichment skipped (enabled=%v, resolver=%v)\n", p.config.EnableEnrichment, p.resolver != nil)
 	}
 
 	// Step 2: Correlation
 	if p.config.EnableCorrelation && p.correlator != nil {
+		fmt.Printf("DEBUG: Starting correlation step\n")
 		correlatedData, err := p.correlator.ProcessEvent(packet, sourceIP, enrichedData)
 		if err != nil {
+			fmt.Printf("DEBUG: Correlation failed: %v\n", err)
 			return &EventResult{
 				Success: false,
 				Error:   fmt.Errorf("correlation failed: %w", err),
 			}
 		}
+		fmt.Printf("DEBUG: Correlation completed successfully\n")
 		enrichedData = correlatedData
 		p.mu.Lock()
 		p.stats.EventsCorrelated++
 		p.mu.Unlock()
+	} else {
+		fmt.Printf("DEBUG: Correlation skipped (enabled=%v, correlator=%v)\n", p.config.EnableCorrelation, p.correlator != nil)
 	}
 
 	// Step 3: Storage
 	var eventID int64
 	if p.config.EnableStorage && p.storage != nil {
-		if err := p.storage.StoreEvent(packet, sourceIP, enrichedData); err != nil {
+		fmt.Printf("DEBUG: Starting storage step\n")
+		// Use immediate storage to get event ID for testing
+		id, err := p.storage.StoreEventImmediate(packet, sourceIP, enrichedData)
+		if err != nil {
+			fmt.Printf("DEBUG: Storage failed: %v\n", err)
 			return &EventResult{
 				Success: false,
 				Error:   fmt.Errorf("storage failed: %w", err),
 			}
 		}
+		fmt.Printf("DEBUG: Storage completed successfully, event_id=%d\n", id)
+		eventID = id
 		p.mu.Lock()
 		p.stats.EventsStored++
 		p.mu.Unlock()
+	} else {
+		fmt.Printf("DEBUG: Storage skipped (enabled=%v, storage=%v)\n", p.config.EnableStorage, p.storage != nil)
 	}
+
+	fmt.Printf("DEBUG: Event processing completed successfully\n")
 
 	return &EventResult{
 		Success:      true,
@@ -354,13 +375,35 @@ func (p *EventProcessor) enrichEvent(packet *types.SNMPPacket, enrichedData map[
 			"value": vb.Value,
 		}
 
-		// Resolve OID to name and description
-		if oidInfo, err := p.resolver.ResolveOID(vb.OID); err == nil {
-			varbindData["name"] = oidInfo.Name
-			varbindData["description"] = oidInfo.Description
-			varbindData["syntax"] = oidInfo.Syntax
-			varbindData["access"] = oidInfo.Access
-			varbindData["mib_name"] = oidInfo.MIBName
+		// Resolve OID to name and description with timeout protection
+		fmt.Printf("DEBUG: Resolving OID: %s\n", vb.OID)
+		if p.resolver != nil {
+			// Use a channel to implement timeout for OID resolution
+			done := make(chan bool, 1)
+			var oidInfo *mib.OIDInfo
+			var err error
+
+			go func() {
+				oidInfo, err = p.resolver.ResolveOID(vb.OID)
+				done <- true
+			}()
+
+			// Wait for resolution with timeout
+			select {
+			case <-done:
+				if err == nil {
+					fmt.Printf("DEBUG: OID resolved successfully: %s -> %s\n", vb.OID, oidInfo.Name)
+					varbindData["name"] = oidInfo.Name
+					varbindData["description"] = oidInfo.Description
+					varbindData["syntax"] = oidInfo.Syntax
+					varbindData["access"] = oidInfo.Access
+					varbindData["mib_name"] = oidInfo.MIBName
+				} else {
+					fmt.Printf("DEBUG: OID resolution failed: %s -> %v\n", vb.OID, err)
+				}
+			case <-time.After(2 * time.Second):
+				fmt.Printf("DEBUG: OID resolution timeout: %s\n", vb.OID)
+			}
 		}
 
 		enrichedVarbinds[i] = varbindData
@@ -373,11 +416,31 @@ func (p *EventProcessor) enrichEvent(packet *types.SNMPPacket, enrichedData map[
 		if trapOID, ok := packet.Varbinds[1].Value.(string); ok {
 			enrichedData["trap_oid"] = trapOID
 
-			// Resolve trap OID
-			if oidInfo, err := p.resolver.ResolveOID(trapOID); err == nil {
-				enrichedData["trap_name"] = oidInfo.Name
-				enrichedData["trap_description"] = oidInfo.Description
-				enrichedData["trap_mib"] = oidInfo.MIBName
+			// Resolve trap OID with timeout protection
+			fmt.Printf("DEBUG: Resolving trap OID: %s\n", trapOID)
+			if p.resolver != nil {
+				done := make(chan bool, 1)
+				var oidInfo *mib.OIDInfo
+				var err error
+
+				go func() {
+					oidInfo, err = p.resolver.ResolveOID(trapOID)
+					done <- true
+				}()
+
+				select {
+				case <-done:
+					if err == nil {
+						fmt.Printf("DEBUG: Trap OID resolved successfully: %s -> %s\n", trapOID, oidInfo.Name)
+						enrichedData["trap_name"] = oidInfo.Name
+						enrichedData["trap_description"] = oidInfo.Description
+						enrichedData["trap_mib"] = oidInfo.MIBName
+					} else {
+						fmt.Printf("DEBUG: Trap OID resolution failed: %s -> %v\n", trapOID, err)
+					}
+				case <-time.After(500 * time.Millisecond):
+					fmt.Printf("DEBUG: Trap OID resolution timeout: %s\n", trapOID)
+				}
 			}
 		}
 	}

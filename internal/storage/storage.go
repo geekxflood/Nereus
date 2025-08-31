@@ -282,6 +282,42 @@ func (s *Storage) StoreEvent(packet *types.SNMPPacket, sourceIP string, enriched
 	return nil
 }
 
+// StoreEventImmediate stores a single event immediately and returns the event ID
+func (s *Storage) StoreEventImmediate(packet *types.SNMPPacket, sourceIP string, enrichedData map[string]interface{}) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Convert packet to event
+	event, err := s.packetToEvent(packet, sourceIP, enrichedData)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert packet to event: %w", err)
+	}
+
+	// Store immediately
+	result, err := s.db.Exec(`
+		INSERT INTO events (
+			timestamp, source_ip, community, version, pdu_type, request_id,
+			trap_oid, trap_name, severity, status, acknowledged, count,
+			first_seen, last_seen, varbinds, metadata, hash, correlation_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, event.Timestamp, event.SourceIP, event.Community, event.Version,
+		event.PDUType, event.RequestID, event.TrapOID, event.TrapName,
+		event.Severity, event.Status, event.Acknowledged, event.Count,
+		event.FirstSeen, event.LastSeen, event.Varbinds, event.Metadata,
+		event.Hash, event.CorrelationID)
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to insert event: %w", err)
+	}
+
+	eventID, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get last insert ID: %w", err)
+	}
+
+	return eventID, nil
+}
+
 // packetToEvent converts an SNMP packet to a storage event
 func (s *Storage) packetToEvent(packet *types.SNMPPacket, sourceIP string, enrichedData map[string]interface{}) (*Event, error) {
 	now := time.Now()

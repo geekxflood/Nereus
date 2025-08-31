@@ -1,0 +1,147 @@
+---
+# Nereus SNMP Trap Testing Configuration
+# Optimized for comprehensive testing of MIB integration and trap processing
+
+app:
+  name: "nereus-test"
+  version: "test"
+  shutdown_timeout: "10s"
+
+logging:
+  level: "debug"
+  format: "json"
+  component: "nereus-test"
+  stdout: true
+
+infra:
+  client:
+    timeout: "10s"
+    max_retries: 2
+    retry_delay: "1s"
+    max_retry_delay: "5s"
+    exponential_backoff: true
+    user_agent: "nereus-test/1.0"
+
+  resolver:
+    cache_enabled: true
+    cache_size: 5000
+    cache_expiry: "30m"
+    enable_partial_oid: true
+    max_search_depth: 10
+
+  reload:
+    enabled: true
+    watch_config_file: true
+    watch_mib_directories: true
+    reload_delay: "1s"
+    max_reload_attempts: 2
+    reload_timeout: "10s"
+    preserve_state: true
+    validate_before_reload: true
+
+metrics:
+  enabled: true
+  listen_address: ":9090"
+  metrics_path: "/metrics"
+  health_path: "/health"
+  ready_path: "/ready"
+  update_interval: "10s"
+  namespace: "nereus_test"
+
+listener:
+  bind_address: "0.0.0.0:1162" # Use non-privileged port for testing
+  max_packet_size: 65507
+  read_timeout: "10s"
+  workers: 2
+  buffer_size: 100
+
+# Legacy server configuration (still used by listener)
+server:
+  host: "0.0.0.0"
+  port: 1162
+  community: "public"
+  max_handlers: 10
+  buffer_size: 8192
+  read_timeout: "10s"
+
+storage:
+  type: "sqlite"
+  connection_string: "./test-data/nereus-test.db"
+  max_connections: 5
+  retention_days: 1
+  cleanup_interval: "10m"
+
+correlator:
+  enabled: true
+  deduplication_window: "2m"
+  correlation_window: "5m"
+  max_groups: 100
+
+notifier:
+  enabled: true
+  workers: 2
+  queue_size: 50
+  retry_attempts: 2
+  retry_delay: "2s"
+  timeout: "10s"
+
+mib:
+  directories:
+    - "./mibs"
+  file_extensions:
+    - ".mib"
+    - ".txt"
+    - ".my"
+  max_file_size: "10MB"
+  enable_hot_reload: true
+  cache_enabled: true
+  cache_expiry: "30m"
+  validation_enabled: false # Disable validation for testing
+
+health_check:
+  enabled: true
+  interval: "10s"
+  timeout: "3s"
+
+# Test webhook endpoints
+webhooks:
+  - name: "test-webhook-local"
+    url: "http://localhost:8080/webhook"
+    method: "POST"
+    timeout: "5s"
+    retry_count: 1
+    retry_delay: "1s"
+    headers:
+      Content-Type: "application/json"
+    template: |
+      {
+        "event_type": "snmp_trap_test",
+        "source_ip": "{{ .SourceIP }}",
+        "community": "{{ .Community }}",
+        "trap_oid": "{{ .TrapOID }}",
+        "trap_name": "{{ .TrapName }}",
+        "timestamp": "{{ .Timestamp }}",
+        "variables": {{ .Variables | toJson }},
+        "test_mode": true
+      }
+
+  - name: "test-webhook-httpbin"
+    url: "https://httpbin.org/post"
+    method: "POST"
+    timeout: "10s"
+    retry_count: 1
+    retry_delay: "2s"
+    headers:
+      Content-Type: "application/json"
+      X-Test-Source: "nereus-testing"
+    template: |
+      {
+        "test_data": {
+          "source_ip": "{{ .SourceIP }}",
+          "community": "{{ .Community }}",
+          "trap_oid": "{{ .TrapOID }}",
+          "trap_name": "{{ .TrapName }}",
+          "timestamp": "{{ .Timestamp }}",
+          "variables": {{ .Variables | toJson }}
+        }
+      }

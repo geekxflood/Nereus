@@ -280,6 +280,16 @@ func NewManager(cfg config.Provider) (*Manager, error) {
 		mibConfig.CacheExpiry = expiry
 	}
 
+	// Required MIBs configuration
+	if requiredMibs, err := cfg.GetStringSlice("mib.required_mibs"); err == nil {
+		mibConfig.RequiredMIBs = requiredMibs
+	}
+
+	// Validation configuration
+	if validationEnabled, err := cfg.GetBool("mib.validation_enabled", mibConfig.ValidationEnabled); err == nil {
+		mibConfig.ValidationEnabled = validationEnabled
+	}
+
 	// Resolver configuration
 	if cacheSize, err := cfg.GetInt("resolver.cache_size", mibConfig.CacheSize); err == nil {
 		mibConfig.CacheSize = cacheSize
