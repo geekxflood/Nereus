@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strconv"
 	"sync"
 	"text/template"
 	"time"
@@ -17,14 +18,180 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	"github.com/geekxflood/common/config"
-	"github.com/geekxflood/nereus/internal/alerts"
 	"github.com/geekxflood/nereus/internal/client"
 	"github.com/geekxflood/nereus/internal/storage"
+	"github.com/prometheus/common/model"
 )
 
 // WebhookSender defines the interface for sending webhook requests
 type WebhookSender interface {
 	SendWebhook(ctx context.Context, request *client.WebhookRequest) (*client.WebhookResponse, error)
+}
+
+// AlertConverter converts SNMP trap events to Prometheus alert format
+type AlertConverter struct {
+	defaultLabels model.LabelSet
+	annotations   model.LabelSet
+}
+
+// NewAlertConverter creates a new alert converter with default labels
+func NewAlertConverter() *AlertConverter {
+	return &AlertConverter{
+		defaultLabels: model.LabelSet{
+			"alertname": "SNMPTrap",
+			"service":   "nereus-snmp-listener",
+		},
+		annotations: model.LabelSet{
+			"summary":     "SNMP trap received",
+			"description": "An SNMP trap was received and processed",
+		},
+	}
+}
+
+// AlertManagerPayload represents the payload format expected by Alertmanager
+type AlertManagerPayload struct {
+	Alerts []AlertManagerAlert `json:"alerts"`
+}
+
+// AlertManagerAlert represents a single alert in Alertmanager format
+type AlertManagerAlert struct {
+	Labels       map[string]string `json:"labels"`
+	Annotations  map[string]string `json:"annotations"`
+	StartsAt     time.Time         `json:"startsAt"`
+	EndsAt       time.Time         `json:"endsAt,omitempty"`
+	GeneratorURL string            `json:"generatorURL,omitempty"`
+}
+
+// ConvertEvent converts a storage event to a Prometheus alert
+func (ac *AlertConverter) ConvertEvent(event *storage.Event) (*model.Alert, error) {
+	if event == nil {
+		return nil, fmt.Errorf("event cannot be nil")
+	}
+
+	// Create labels
+	labels := model.LabelSet{
+		"alertname": "SNMPTrap",
+		"source_ip": model.LabelValue(event.SourceIP),
+		"community": model.LabelValue(event.Community),
+		"trap_oid":  model.LabelValue(event.TrapOID),
+		"severity":  model.LabelValue(event.Severity),
+		"status":    model.LabelValue(event.Status),
+		"instance":  model.LabelValue(event.SourceIP),
+		"job":       "snmp-trap",
+	}
+
+	// Add trap name if available
+	if event.TrapName != "" {
+		labels["trap_name"] = model.LabelValue(event.TrapName)
+		labels["alertname"] = model.LabelValue(fmt.Sprintf("SNMPTrap_%s", event.TrapName))
+	}
+
+	// Add correlation ID if available
+	if event.CorrelationID != "" {
+		labels["correlation_id"] = model.LabelValue(event.CorrelationID)
+	}
+
+	// Add version and PDU type
+	labels["snmp_version"] = model.LabelValue(strconv.Itoa(event.Version))
+	labels["pdu_type"] = model.LabelValue(strconv.Itoa(event.PDUType))
+
+	// Create annotations
+	annotations := model.LabelSet{
+		"summary": model.LabelValue(fmt.Sprintf("SNMP trap %s from %s", event.TrapName, event.SourceIP)),
+		"description": model.LabelValue(fmt.Sprintf(
+			"SNMP trap received from %s (community: %s, OID: %s, severity: %s)",
+			event.SourceIP, event.Community, event.TrapOID, event.Severity,
+		)),
+		"trap_oid":    model.LabelValue(event.TrapOID),
+		"source_ip":   model.LabelValue(event.SourceIP),
+		"community":   model.LabelValue(event.Community),
+		"first_seen":  model.LabelValue(event.FirstSeen.Format(time.RFC3339)),
+		"last_seen":   model.LabelValue(event.LastSeen.Format(time.RFC3339)),
+		"event_count": model.LabelValue(strconv.Itoa(event.Count)),
+	}
+
+	// Add request ID
+	annotations["request_id"] = model.LabelValue(strconv.Itoa(int(event.RequestID)))
+
+	// Add acknowledgment info if acknowledged
+	if event.Acknowledged {
+		annotations["acknowledged"] = "true"
+		if event.AckBy != "" {
+			annotations["acknowledged_by"] = model.LabelValue(event.AckBy)
+		}
+		if event.AckTime != nil {
+			annotations["acknowledged_at"] = model.LabelValue(event.AckTime.Format(time.RFC3339))
+		}
+	}
+
+	// Add varbinds if available
+	if event.Varbinds != "" {
+		annotations["varbinds"] = model.LabelValue(event.Varbinds)
+	}
+
+	// Merge with default labels and annotations
+	for k, v := range ac.defaultLabels {
+		if _, exists := labels[k]; !exists {
+			labels[k] = v
+		}
+	}
+
+	for k, v := range ac.annotations {
+		if _, exists := annotations[k]; !exists {
+			annotations[k] = v
+		}
+	}
+
+	// Create the alert
+	alert := &model.Alert{
+		Labels:      labels,
+		Annotations: annotations,
+		StartsAt:    event.FirstSeen,
+		EndsAt:      time.Time{}, // Empty for ongoing alerts
+	}
+
+	return alert, nil
+}
+
+// ConvertToAlertManagerPayload converts Prometheus alerts to Alertmanager payload format
+func (ac *AlertConverter) ConvertToAlertManagerPayload(alerts []*model.Alert) *AlertManagerPayload {
+	payload := &AlertManagerPayload{
+		Alerts: make([]AlertManagerAlert, len(alerts)),
+	}
+
+	for i, alert := range alerts {
+		// Convert labels
+		labels := make(map[string]string)
+		for k, v := range alert.Labels {
+			labels[string(k)] = string(v)
+		}
+
+		// Convert annotations
+		annotations := make(map[string]string)
+		for k, v := range alert.Annotations {
+			annotations[string(k)] = string(v)
+		}
+
+		payload.Alerts[i] = AlertManagerAlert{
+			Labels:       labels,
+			Annotations:  annotations,
+			StartsAt:     alert.StartsAt,
+			EndsAt:       alert.EndsAt,
+			GeneratorURL: alert.GeneratorURL,
+		}
+	}
+
+	return payload
+}
+
+// ConvertEventToAlertManagerPayload converts a single event directly to Alertmanager payload
+func (ac *AlertConverter) ConvertEventToAlertManagerPayload(event *storage.Event) (*AlertManagerPayload, error) {
+	alert, err := ac.ConvertEvent(event)
+	if err != nil {
+		return nil, err
+	}
+
+	return ac.ConvertToAlertManagerPayload([]*model.Alert{alert}), nil
 }
 
 //go:embed templates/default.cue
@@ -130,7 +297,7 @@ type WebhookStats struct {
 type Notifier struct {
 	config          *NotifierConfig
 	client          WebhookSender
-	alertConverter  *alerts.AlertConverter
+	alertConverter  *AlertConverter
 	defaultTemplate *template.Template
 	taskQueue       chan *NotificationTask
 	ctx             context.Context
@@ -162,7 +329,7 @@ func NewNotifier(cfg config.Provider, webhookSender WebhookSender) (*Notifier, e
 	}
 
 	// Create alert converter for Prometheus/Alertmanager integration
-	alertConverter := alerts.NewAlertConverter()
+	alertConverter := NewAlertConverter()
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

@@ -5,21 +5,312 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/geekxflood/common/config"
 	"github.com/geekxflood/nereus/internal/parser"
 	"github.com/geekxflood/nereus/internal/types"
-	"github.com/geekxflood/nereus/internal/validator"
 )
+
+// ValidationConfig holds configuration for packet validation
+type ValidationConfig struct {
+	MaxPacketSize      int           `json:"max_packet_size"`
+	MaxVarbinds        int           `json:"max_varbinds"`
+	AllowedVersions    []int         `json:"allowed_versions"`
+	AllowedCommunities []string      `json:"allowed_communities"`
+	BlockedSources     []string      `json:"blocked_sources"`
+	AllowedSources     []string      `json:"allowed_sources"`
+	MaxOIDLength       int           `json:"max_oid_length"`
+	MaxStringLength    int           `json:"max_string_length"`
+	ValidateTimestamp  bool          `json:"validate_timestamp"`
+	MaxTimestampSkew   time.Duration `json:"max_timestamp_skew"`
+}
+
+// DefaultValidationConfig returns a default validation configuration
+func DefaultValidationConfig() *ValidationConfig {
+	return &ValidationConfig{
+		MaxPacketSize:      65536,
+		MaxVarbinds:        100,
+		AllowedVersions:    []int{types.VersionSNMPv2c},
+		AllowedCommunities: []string{"public"},
+		BlockedSources:     []string{},
+		AllowedSources:     []string{},
+		MaxOIDLength:       128,
+		MaxStringLength:    1024,
+		ValidateTimestamp:  false,
+		MaxTimestampSkew:   time.Hour,
+	}
+}
+
+// PacketValidator validates SNMP packets for security and correctness
+type PacketValidator struct {
+	config *ValidationConfig
+}
+
+// NewPacketValidator creates a new packet validator with the given configuration
+func NewPacketValidator(config *ValidationConfig) *PacketValidator {
+	if config == nil {
+		config = DefaultValidationConfig()
+	}
+	return &PacketValidator{config: config}
+}
+
+// ValidatePacket performs comprehensive validation of an SNMP packet
+func (v *PacketValidator) ValidatePacket(packet *types.SNMPPacket, sourceAddr string, rawData []byte) error {
+	if packet == nil {
+		return &types.ValidationError{Field: "packet", Message: "packet is nil"}
+	}
+
+	// Validate packet size
+	if err := v.validatePacketSize(rawData); err != nil {
+		return err
+	}
+
+	// Validate source address
+	if err := v.validateSourceAddress(sourceAddr); err != nil {
+		return err
+	}
+
+	// Validate SNMP version
+	if err := v.validateVersion(packet.Version); err != nil {
+		return err
+	}
+
+	// Validate community string
+	if err := v.validateCommunity(packet.Community); err != nil {
+		return err
+	}
+
+	// Validate PDU type
+	if err := v.validatePDUType(packet.PDUType, packet.Version); err != nil {
+		return err
+	}
+
+	// Validate varbinds
+	if err := v.validateVarbinds(packet.Varbinds); err != nil {
+		return err
+	}
+
+	// Validate version-specific fields
+	switch packet.Version {
+	case types.VersionSNMPv2c:
+		if err := v.validateSNMPv2cFields(packet); err != nil {
+			return err
+		}
+	}
+
+	// Validate timestamp if enabled
+	if v.config.ValidateTimestamp {
+		if err := v.validateTimestamp(packet.Timestamp); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validatePacketSize checks if the packet size is within limits
+func (v *PacketValidator) validatePacketSize(rawData []byte) error {
+	if len(rawData) > v.config.MaxPacketSize {
+		return &types.ValidationError{
+			Field:   "packet_size",
+			Message: fmt.Sprintf("packet size %d exceeds maximum %d", len(rawData), v.config.MaxPacketSize),
+		}
+	}
+	return nil
+}
+
+// validateSourceAddress validates the source IP address
+func (v *PacketValidator) validateSourceAddress(sourceAddr string) error {
+	ip := net.ParseIP(sourceAddr)
+	if ip == nil {
+		return &types.ValidationError{
+			Field:   "source_address",
+			Message: fmt.Sprintf("invalid IP address: %s", sourceAddr),
+		}
+	}
+
+	// Check blocked sources
+	for _, blocked := range v.config.BlockedSources {
+		if v.matchesIPPattern(ip.String(), blocked) {
+			return &types.ValidationError{
+				Field:   "source_address",
+				Message: fmt.Sprintf("source address %s is blocked", ip.String()),
+			}
+		}
+	}
+
+	// Check allowed sources (if configured)
+	if len(v.config.AllowedSources) > 0 {
+		allowed := false
+		for _, allowedPattern := range v.config.AllowedSources {
+			if v.matchesIPPattern(ip.String(), allowedPattern) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return &types.ValidationError{
+				Field:   "source_address",
+				Message: fmt.Sprintf("source address %s is not in allowed list", ip.String()),
+			}
+		}
+	}
+
+	return nil
+}
+
+// matchesIPPattern checks if an IP matches a pattern (supports CIDR and wildcards)
+func (v *PacketValidator) matchesIPPattern(ip, pattern string) bool {
+	// Try CIDR notation first
+	if strings.Contains(pattern, "/") {
+		_, network, err := net.ParseCIDR(pattern)
+		if err == nil {
+			ipAddr := net.ParseIP(ip)
+			if ipAddr != nil {
+				return network.Contains(ipAddr)
+			}
+		}
+	}
+
+	// Simple string match
+	return ip == pattern
+}
+
+// validateVersion checks if the SNMP version is allowed
+func (v *PacketValidator) validateVersion(version int) error {
+	for _, allowed := range v.config.AllowedVersions {
+		if version == allowed {
+			return nil
+		}
+	}
+	return &types.ValidationError{
+		Field:   "version",
+		Message: fmt.Sprintf("SNMP version %d is not allowed", version),
+	}
+}
+
+// validateCommunity checks if the community string is allowed
+func (v *PacketValidator) validateCommunity(community string) error {
+	if len(v.config.AllowedCommunities) == 0 {
+		return nil // No restrictions
+	}
+
+	for _, allowed := range v.config.AllowedCommunities {
+		if community == allowed {
+			return nil
+		}
+	}
+	return &types.ValidationError{
+		Field:   "community",
+		Message: fmt.Sprintf("community string '%s' is not allowed", community),
+	}
+}
+
+// validatePDUType checks if the PDU type is valid for the SNMP version
+func (v *PacketValidator) validatePDUType(pduType, version int) error {
+	switch version {
+	case types.VersionSNMPv2c:
+		if pduType != types.PDUTypeTrapV2 && pduType != types.PDUTypeInformRequest {
+			return &types.ValidationError{
+				Field:   "pdu_type",
+				Message: fmt.Sprintf("PDU type %d is not valid for SNMPv2c", pduType),
+			}
+		}
+	default:
+		return &types.ValidationError{
+			Field:   "pdu_type",
+			Message: fmt.Sprintf("unknown SNMP version %d (only SNMPv2c is supported)", version),
+		}
+	}
+	return nil
+}
+
+// validateVarbinds validates the variable bindings
+func (v *PacketValidator) validateVarbinds(varbinds []types.Varbind) error {
+	if len(varbinds) > v.config.MaxVarbinds {
+		return &types.ValidationError{
+			Field:   "varbinds",
+			Message: fmt.Sprintf("too many varbinds: %d (max: %d)", len(varbinds), v.config.MaxVarbinds),
+		}
+	}
+
+	for i, vb := range varbinds {
+		// Validate OID length
+		if len(vb.OID) > v.config.MaxOIDLength {
+			return &types.ValidationError{
+				Field:   fmt.Sprintf("varbind[%d].oid", i),
+				Message: fmt.Sprintf("OID too long: %d characters (max: %d)", len(vb.OID), v.config.MaxOIDLength),
+			}
+		}
+
+		// Validate string values
+		if vb.Type == types.TypeOctetString {
+			if str, ok := vb.Value.(string); ok {
+				if len(str) > v.config.MaxStringLength {
+					return &types.ValidationError{
+						Field:   fmt.Sprintf("varbind[%d].value", i),
+						Message: fmt.Sprintf("string value too long: %d characters (max: %d)", len(str), v.config.MaxStringLength),
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateSNMPv2cFields validates SNMP v2c specific fields
+func (v *PacketValidator) validateSNMPv2cFields(packet *types.SNMPPacket) error {
+	// Error status should be 0 for traps
+	if packet.ErrorStatus != 0 {
+		return &types.ValidationError{
+			Field:   "error_status",
+			Message: fmt.Sprintf("unexpected error status %d in trap", packet.ErrorStatus),
+		}
+	}
+
+	// Error index should be 0 for traps
+	if packet.ErrorIndex != 0 {
+		return &types.ValidationError{
+			Field:   "error_index",
+			Message: fmt.Sprintf("unexpected error index %d in trap", packet.ErrorIndex),
+		}
+	}
+
+	return nil
+}
+
+// validateTimestamp validates the packet timestamp
+func (v *PacketValidator) validateTimestamp(timestamp time.Time) error {
+	if timestamp.IsZero() {
+		return nil // No timestamp to validate
+	}
+
+	now := time.Now()
+	skew := now.Sub(timestamp)
+	if skew < 0 {
+		skew = -skew
+	}
+
+	if skew > v.config.MaxTimestampSkew {
+		return &types.ValidationError{
+			Field:   "timestamp",
+			Message: fmt.Sprintf("timestamp skew too large: %v (max: %v)", skew, v.config.MaxTimestampSkew),
+		}
+	}
+
+	return nil
+}
 
 // Listener represents an SNMP trap listener that receives and processes SNMP traps.
 type Listener struct {
 	config    config.Provider
 	conn      *net.UDPConn
 	handlers  chan *TrapHandler
-	validator *validator.PacketValidator
+	validator *PacketValidator
 	stats     *types.ListenerStats
 	wg        sync.WaitGroup
 	mu        sync.RWMutex
@@ -46,7 +337,7 @@ func NewListener(cfg config.Provider) (*Listener, error) {
 	}
 
 	// Create packet validator with default configuration
-	packetValidator := validator.NewPacketValidator(validator.DefaultValidationConfig())
+	packetValidator := NewPacketValidator(DefaultValidationConfig())
 
 	// Initialize statistics
 	stats := types.NewListenerStats()

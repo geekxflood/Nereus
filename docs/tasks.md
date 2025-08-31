@@ -102,31 +102,31 @@ This document outlines the step-by-step tasks for simplifying the Nereus SNMP tr
 
 ### Task 3.1: Integrate Validation into Listener
 
-- [ ] Move `internal/validator/validator.go` functionality into `internal/listener`
-- [ ] Integrate packet validation directly into trap processing pipeline
-- [ ] Preserve all validation rules and security checks
-- [ ] Maintain validation statistics and error reporting
+- [x] Move `internal/validator/validator.go` functionality into `internal/listener`
+- [x] Integrate packet validation directly into trap processing pipeline
+- [x] Preserve all validation rules and security checks
+- [x] Maintain validation statistics and error reporting
 
 ### Task 3.2: Integrate Alerts into Notifier
 
-- [ ] Move `internal/alerts/alerts.go` functionality into `internal/notifier`
-- [ ] Integrate Prometheus alert conversion with notification pipeline
-- [ ] Preserve all alert formatting and label mapping
-- [ ] Maintain alert conversion statistics
+- [x] Move `internal/alerts/alerts.go` functionality into `internal/notifier`
+- [x] Integrate Prometheus alert conversion with notification pipeline
+- [x] Preserve all alert formatting and label mapping
+- [x] Maintain alert conversion statistics
 
 ### Task 3.3: Update Package Integration
 
-- [ ] Update `internal/listener` to handle validation internally
-- [ ] Update `internal/notifier` to handle alert conversion internally
-- [ ] Update all imports throughout codebase
+- [x] Update `internal/listener` to handle validation internally
+- [x] Update `internal/notifier` to handle alert conversion internally
+- [x] Update all imports throughout codebase
 - [ ] Remove old `internal/validator` and `internal/alerts` directories
 
 ### Task 3.4: Test Integration Changes
 
-- [ ] Test packet validation within listener package
-- [ ] Test alert conversion within notifier package
-- [ ] Verify no regression in validation or alert functionality
-- [ ] Run end-to-end tests for complete SNMP processing pipeline
+- [x] Test packet validation within listener package
+- [x] Test alert conversion within notifier package
+- [x] Verify no regression in validation or alert functionality
+- [x] Run end-to-end tests for complete SNMP processing pipeline
 
 ## Phase 4: Correlator Simplification
 

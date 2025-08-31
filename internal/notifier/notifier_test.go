@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/geekxflood/nereus/internal/alerts"
 	"github.com/geekxflood/nereus/internal/client"
 	"github.com/geekxflood/nereus/internal/storage"
 )
@@ -376,7 +375,7 @@ func TestGeneratePayloadAlertmanager(t *testing.T) {
 	}
 
 	// Verify it's valid JSON
-	var alertPayload alerts.AlertManagerPayload
+	var alertPayload AlertManagerPayload
 	err = json.Unmarshal(payload, &alertPayload)
 	if err != nil {
 		t.Fatalf("Payload is not valid Alertmanager JSON: %v", err)
@@ -501,7 +500,7 @@ func TestSendNotificationWithMockServer(t *testing.T) {
 	}
 
 	// Verify payload content
-	var alertPayload alerts.AlertManagerPayload
+	var alertPayload AlertManagerPayload
 	err = json.Unmarshal(receivedPayloads[0], &alertPayload)
 	if err != nil {
 		t.Fatalf("Received payload is not valid Alertmanager JSON: %v", err)
