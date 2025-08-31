@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/geekxflood/common/config"
-	"github.com/geekxflood/nereus/internal/parser"
+	"github.com/geekxflood/nereus/internal/mib"
 	"github.com/geekxflood/nereus/internal/types"
 )
 
@@ -561,8 +561,10 @@ func (l *Listener) processTrap(handler *TrapHandler) {
 
 // parseSNMPPacket parses raw SNMP packet data into an SNMPPacket structure.
 func (l *Listener) parseSNMPPacket(data []byte) (*types.SNMPPacket, error) {
-	// Use the SNMP parser
-	snmpParser := parser.NewSNMPParser(data)
+	// Create a temporary MIB manager for parsing (we only need the parser functionality)
+	// This is a lightweight approach since we don't need the full MIB loading capabilities
+	tempManager := &mib.Manager{}
+	snmpParser := tempManager.NewSNMPParser(data)
 	packet, err := snmpParser.ParseSNMPPacket()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse SNMP packet: %w", err)
