@@ -22,6 +22,11 @@ import (
 	"github.com/geekxflood/nereus/internal/storage"
 )
 
+// WebhookSender defines the interface for sending webhook requests
+type WebhookSender interface {
+	SendWebhook(ctx context.Context, request *client.WebhookRequest) (*client.WebhookResponse, error)
+}
+
 //go:embed templates/default.cue
 var defaultTemplate embed.FS
 
@@ -124,7 +129,7 @@ type WebhookStats struct {
 // Notifier manages webhook notifications with focus on Alertmanager integration
 type Notifier struct {
 	config          *NotifierConfig
-	client          *client.HTTPClient
+	client          WebhookSender
 	alertConverter  *alerts.AlertConverter
 	defaultTemplate *template.Template
 	taskQueue       chan *NotificationTask
@@ -136,12 +141,12 @@ type Notifier struct {
 }
 
 // NewNotifier creates a new notification service
-func NewNotifier(cfg config.Provider, httpClient *client.HTTPClient) (*Notifier, error) {
+func NewNotifier(cfg config.Provider, webhookSender WebhookSender) (*Notifier, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("configuration provider cannot be nil")
 	}
-	if httpClient == nil {
-		return nil, fmt.Errorf("HTTP client cannot be nil")
+	if webhookSender == nil {
+		return nil, fmt.Errorf("webhook sender cannot be nil")
 	}
 
 	// Load notifier configuration
@@ -164,7 +169,7 @@ func NewNotifier(cfg config.Provider, httpClient *client.HTTPClient) (*Notifier,
 
 	notifier := &Notifier{
 		config:          notifierConfig,
-		client:          httpClient,
+		client:          webhookSender,
 		alertConverter:  alertConverter,
 		defaultTemplate: defaultTemplate,
 		taskQueue:       make(chan *NotificationTask, notifierConfig.QueueSize),
@@ -251,7 +256,7 @@ func loadWebhookConfigs(cfg config.Provider) ([]WebhookConfig, error) {
 	}
 
 	for _, path := range webhookPaths {
-		// Try to get webhook configurations as a map first
+		// Try to get webhook configurations as a map first, then try other methods
 		if webhookMap, err := cfg.GetMap(path); err == nil {
 			// Convert to JSON and back to parse the webhook configurations
 			jsonData, err := json.Marshal(webhookMap)
@@ -259,9 +264,47 @@ func loadWebhookConfigs(cfg config.Provider) ([]WebhookConfig, error) {
 				continue
 			}
 
-			var parsedWebhooks []WebhookConfig
-			if err := json.Unmarshal(jsonData, &parsedWebhooks); err != nil {
+			// Use a temporary struct for unmarshaling with string timeout
+			type tempWebhookConfig struct {
+				Name        string            `json:"name"`
+				URL         string            `json:"url"`
+				Method      string            `json:"method"`
+				Format      string            `json:"format"`
+				Template    string            `json:"template"`
+				Enabled     bool              `json:"enabled"`
+				Filters     []string          `json:"filters"`
+				Timeout     string            `json:"timeout"` // string instead of time.Duration
+				RetryCount  int               `json:"retry_count"`
+				ContentType string            `json:"content_type"`
+				Headers     map[string]string `json:"headers"`
+			}
+
+			var tempWebhooks []tempWebhookConfig
+			if err := json.Unmarshal(jsonData, &tempWebhooks); err != nil {
 				continue
+			}
+
+			// Convert to actual WebhookConfig structs
+			var parsedWebhooks []WebhookConfig
+			for _, temp := range tempWebhooks {
+				timeout, err := time.ParseDuration(temp.Timeout)
+				if err != nil {
+					timeout = 10 * time.Second // default
+				}
+
+				parsedWebhooks = append(parsedWebhooks, WebhookConfig{
+					Name:        temp.Name,
+					URL:         temp.URL,
+					Method:      temp.Method,
+					Format:      temp.Format,
+					Template:    temp.Template,
+					Enabled:     temp.Enabled,
+					Filters:     temp.Filters,
+					Timeout:     timeout,
+					RetryCount:  temp.RetryCount,
+					ContentType: temp.ContentType,
+					Headers:     temp.Headers,
+				})
 			}
 
 			// Set defaults for webhook configurations
@@ -288,6 +331,85 @@ func loadWebhookConfigs(cfg config.Provider) ([]WebhookConfig, error) {
 
 			webhooks = parsedWebhooks
 			break
+		}
+
+		// If GetMap failed, try to use reflection to get the data (for test providers)
+		if provider, ok := cfg.(interface{ Get(string) (any, error) }); ok {
+			if data, err := provider.Get(path); err == nil {
+				// Convert to JSON and back to parse the webhook configurations
+				jsonData, err := json.Marshal(data)
+				if err != nil {
+					continue
+				}
+
+				// Use a temporary struct for unmarshaling with string timeout
+				type tempWebhookConfig struct {
+					Name        string            `json:"name"`
+					URL         string            `json:"url"`
+					Method      string            `json:"method"`
+					Format      string            `json:"format"`
+					Template    string            `json:"template"`
+					Enabled     bool              `json:"enabled"`
+					Filters     []string          `json:"filters"`
+					Timeout     string            `json:"timeout"` // string instead of time.Duration
+					RetryCount  int               `json:"retry_count"`
+					ContentType string            `json:"content_type"`
+					Headers     map[string]string `json:"headers"`
+				}
+
+				var tempWebhooks []tempWebhookConfig
+				if err := json.Unmarshal(jsonData, &tempWebhooks); err != nil {
+					continue
+				}
+
+				// Convert to actual WebhookConfig structs
+				var parsedWebhooks []WebhookConfig
+				for _, temp := range tempWebhooks {
+					timeout, err := time.ParseDuration(temp.Timeout)
+					if err != nil {
+						timeout = 10 * time.Second // default
+					}
+
+					parsedWebhooks = append(parsedWebhooks, WebhookConfig{
+						Name:        temp.Name,
+						URL:         temp.URL,
+						Method:      temp.Method,
+						Format:      temp.Format,
+						Template:    temp.Template,
+						Enabled:     temp.Enabled,
+						Filters:     temp.Filters,
+						Timeout:     timeout,
+						RetryCount:  temp.RetryCount,
+						ContentType: temp.ContentType,
+						Headers:     temp.Headers,
+					})
+				}
+
+				// Set defaults for webhook configurations
+				for i := range parsedWebhooks {
+					if parsedWebhooks[i].Method == "" {
+						parsedWebhooks[i].Method = "POST"
+					}
+					if parsedWebhooks[i].Format == "" {
+						parsedWebhooks[i].Format = "alertmanager"
+					}
+					if parsedWebhooks[i].ContentType == "" {
+						parsedWebhooks[i].ContentType = "application/json"
+					}
+					if parsedWebhooks[i].Timeout == 0 {
+						parsedWebhooks[i].Timeout = 10 * time.Second
+					}
+					if parsedWebhooks[i].RetryCount == 0 {
+						parsedWebhooks[i].RetryCount = 3
+					}
+					if parsedWebhooks[i].Headers == nil {
+						parsedWebhooks[i].Headers = make(map[string]string)
+					}
+				}
+
+				webhooks = parsedWebhooks
+				break
+			}
 		}
 	}
 

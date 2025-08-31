@@ -58,45 +58,45 @@ This document outlines the step-by-step tasks for simplifying the Nereus SNMP tr
 
 ### Task 2.1: Create Infrastructure Package Structure
 
-- [ ] Create new `internal/infra` directory
-- [ ] Design unified interface for HTTP client, retry, and reload functionality
-- [ ] Create consolidated configuration structure for infrastructure components
-- [ ] Define clear separation between different infrastructure concerns
+- [x] Create new `internal/infra` directory
+- [x] Design unified interface for HTTP client, retry, and reload functionality
+- [x] Create consolidated configuration structure for infrastructure components
+- [x] Define clear separation between different infrastructure concerns
 
 ### Task 2.2: Migrate HTTP Client Functionality
 
-- [ ] Move `internal/client/client.go` to `internal/infra/client.go`
-- [ ] Preserve all webhook request functionality and statistics
-- [ ] Maintain timeout handling and error categorization
-- [ ] Keep all HTTP client configuration options
+- [x] Move `internal/client/client.go` to `internal/infra/client.go`
+- [x] Preserve all webhook request functionality and statistics
+- [x] Maintain timeout handling and error categorization
+- [x] Keep all HTTP client configuration options
 
 ### Task 2.3: Migrate Retry Functionality
 
-- [ ] Move `internal/retry/retry.go` to `internal/infra/retry.go`
-- [ ] Integrate retry logic with HTTP client for webhook delivery
-- [ ] Preserve exponential backoff and circuit breaker functionality
-- [ ] Maintain all retry statistics and configuration options
+- [x] Move `internal/retry/retry.go` to `internal/infra/retry.go`
+- [x] Integrate retry logic with HTTP client for webhook delivery
+- [x] Preserve exponential backoff and circuit breaker functionality
+- [x] Maintain all retry statistics and configuration options
 
 ### Task 2.4: Migrate Reload Functionality
 
-- [ ] Move `internal/reload/reload.go` to `internal/infra/reload.go`
-- [ ] Integrate reload manager with consolidated MIB package
-- [ ] Preserve file system watching and debouncing logic
-- [ ] Maintain component reload registration system
+- [x] Move `internal/reload/reload.go` to `internal/infra/reload.go`
+- [x] Integrate reload manager with consolidated MIB package
+- [x] Preserve file system watching and debouncing logic
+- [x] Maintain component reload registration system
 
 ### Task 2.5: Update Infrastructure Integration
 
-- [ ] Update `internal/app/app.go` to use consolidated infrastructure package
-- [ ] Modify `internal/notifier` to use consolidated HTTP client and retry
-- [ ] Update all imports from old packages to new `infra` package
+- [x] Update `internal/app/app.go` to use consolidated infrastructure package
+- [x] Modify `internal/notifier` to use consolidated HTTP client and retry
+- [x] Update all imports from old packages to new `infra` package
 - [ ] Remove old `internal/client`, `internal/retry`, and `internal/reload` directories
 
 ### Task 2.6: Test Infrastructure Consolidation
 
-- [ ] Migrate and consolidate all infrastructure-related tests
-- [ ] Test HTTP client functionality with retry mechanisms
-- [ ] Verify reload functionality works with consolidated MIB package
-- [ ] Run integration tests for webhook delivery and error handling
+- [x] Migrate and consolidate all infrastructure-related tests
+- [x] Test HTTP client functionality with retry mechanisms
+- [x] Verify reload functionality works with consolidated MIB package
+- [x] Run integration tests for webhook delivery and error handling
 
 ## Phase 3: Validation and Alerts Integration
 

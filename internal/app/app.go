@@ -14,14 +14,13 @@ import (
 
 	"github.com/geekxflood/common/config"
 	"github.com/geekxflood/common/logging"
-	"github.com/geekxflood/nereus/internal/client"
 	"github.com/geekxflood/nereus/internal/correlator"
 	"github.com/geekxflood/nereus/internal/events"
+	"github.com/geekxflood/nereus/internal/infra"
 	"github.com/geekxflood/nereus/internal/listener"
 	"github.com/geekxflood/nereus/internal/metrics"
 	"github.com/geekxflood/nereus/internal/mib"
 	"github.com/geekxflood/nereus/internal/notifier"
-	"github.com/geekxflood/nereus/internal/reload"
 	"github.com/geekxflood/nereus/internal/storage"
 	"github.com/geekxflood/nereus/internal/types"
 )
@@ -91,10 +90,9 @@ type Application struct {
 	storage        *storage.Storage
 	correlator     *correlator.Correlator
 	processor      *events.EventProcessor
-	httpClient     *client.HTTPClient
+	infraManager   *infra.Manager
 	notifier       *notifier.Notifier
 	metricsManager *metrics.MetricsManager
-	reloadManager  *reload.ReloadManager
 
 	// Logging
 	logger        logging.Logger
@@ -180,11 +178,11 @@ func NewApplication(configManager config.Manager) (*Application, error) {
 		return nil, fmt.Errorf("failed to initialize metrics manager: %w", err)
 	}
 
-	// Initialize reload manager
-	reloadManager, err := reload.NewReloadManager(configManager, logger)
+	// Initialize consolidated infrastructure manager
+	infraManager, err := infra.NewManager(configProvider, appLogger)
 	if err != nil {
 		cleanup.Close()
-		return nil, fmt.Errorf("failed to initialize reload manager: %w", err)
+		return nil, fmt.Errorf("failed to initialize infrastructure manager: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -195,7 +193,7 @@ func NewApplication(configManager config.Manager) (*Application, error) {
 		logger:         appLogger,
 		loggerCleanup:  cleanup,
 		metricsManager: metricsManager,
-		reloadManager:  reloadManager,
+		infraManager:   infraManager,
 		ctx:            ctx,
 		cancel:         cancel,
 		stats: &AppStats{
@@ -224,18 +222,15 @@ func (a *Application) Initialize() error {
 	// Set initial component health
 	a.metricsManager.SetComponentHealth("app", true)
 
-	// Start reload manager
-	if err := a.reloadManager.Start(); err != nil {
-		return fmt.Errorf("failed to start reload manager: %w", err)
-	}
-
 	// Initialize consolidated MIB manager
 	if err := a.initializeMIBManager(); err != nil {
 		return fmt.Errorf("failed to initialize MIB manager: %w", err)
 	}
 
-	// TODO: Register MIB manager for hot reload (needs interface implementation)
-	// a.reloadManager.RegisterComponent("mib_manager", a.mibManager)
+	// Start infrastructure hot reload
+	if err := a.infraManager.StartHotReload(nil, a.configProvider); err != nil {
+		return fmt.Errorf("failed to start hot reload: %w", err)
+	}
 
 	// Initialize storage
 	if err := a.initializeStorage(); err != nil {
@@ -247,10 +242,7 @@ func (a *Application) Initialize() error {
 		return fmt.Errorf("failed to initialize correlator: %w", err)
 	}
 
-	// Initialize HTTP client
-	if err := a.initializeHTTPClient(); err != nil {
-		return fmt.Errorf("failed to initialize HTTP client: %w", err)
-	}
+	// HTTP client is now part of infrastructure manager
 
 	// Initialize notifier
 	if err := a.initializeNotifier(); err != nil {
@@ -339,10 +331,10 @@ func (a *Application) Shutdown() error {
 		}
 	}
 
-	if a.httpClient != nil {
-		a.logger.Info("Shutting down HTTP client")
-		if err := a.httpClient.Close(); err != nil {
-			shutdownErrors = append(shutdownErrors, fmt.Errorf("HTTP client shutdown error: %w", err))
+	if a.infraManager != nil {
+		a.logger.Info("Shutting down infrastructure manager")
+		if err := a.infraManager.Close(); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("infrastructure manager shutdown error: %w", err))
 		}
 	}
 
@@ -350,13 +342,6 @@ func (a *Application) Shutdown() error {
 		a.logger.Info("Shutting down storage")
 		if err := a.storage.Close(); err != nil {
 			shutdownErrors = append(shutdownErrors, fmt.Errorf("storage shutdown error: %w", err))
-		}
-	}
-
-	if a.reloadManager != nil {
-		a.logger.Info("Shutting down reload manager")
-		if err := a.reloadManager.Stop(); err != nil {
-			shutdownErrors = append(shutdownErrors, fmt.Errorf("reload manager shutdown error: %w", err))
 		}
 	}
 
@@ -449,24 +434,13 @@ func (a *Application) initializeCorrelator() error {
 	return nil
 }
 
-// initializeHTTPClient initializes the HTTP client component
-func (a *Application) initializeHTTPClient() error {
-	a.logger.Info("Initializing HTTP client")
-
-	httpClient, err := client.NewHTTPClient(a.configProvider)
-	if err != nil {
-		return err
-	}
-
-	a.httpClient = httpClient
-	return nil
-}
+// HTTP client is now part of the consolidated infrastructure manager
 
 // initializeNotifier initializes the notifier component
 func (a *Application) initializeNotifier() error {
 	a.logger.Info("Initializing notifier")
 
-	notifier, err := notifier.NewNotifier(a.configProvider, a.httpClient)
+	notifier, err := notifier.NewNotifier(a.configProvider, a.infraManager)
 	if err != nil {
 		return err
 	}
@@ -703,8 +677,8 @@ func (a *Application) updateStats() {
 		a.stats.ComponentStats["correlator"] = a.correlator.GetStats()
 	}
 
-	if a.httpClient != nil {
-		a.stats.ComponentStats["http_client"] = a.httpClient.GetStats()
+	if a.infraManager != nil {
+		a.stats.ComponentStats["infrastructure"] = a.infraManager.GetStats()
 	}
 
 	if a.notifier != nil {
@@ -759,7 +733,7 @@ func (a *Application) GetMetricsManager() *metrics.MetricsManager {
 	return a.metricsManager
 }
 
-// GetReloadManager returns the reload manager
-func (a *Application) GetReloadManager() *reload.ReloadManager {
-	return a.reloadManager
+// GetInfraManager returns the infrastructure manager
+func (a *Application) GetInfraManager() *infra.Manager {
+	return a.infraManager
 }
