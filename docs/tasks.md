@@ -1,478 +1,240 @@
-# Development Task List
+# Tasks
 
-This document outlines all remaining development tasks needed to complete the nereus SNMPv2c trap alerting system. Tasks are organized by component and marked with completion status.
+This document outlines the step-by-step tasks for simplifying the Nereus SNMP trap alerting system by reducing internal packages from 17 to 9 while maintaining all core functionality.
 
-## Project Status Overview
+## Overview
 
-- **Configuration System**: ✅ Complete
-- **SNMP Trap Listener**: ✅ Complete (Core + Protocol Support)
-- **MIB Parser**: ✅ Complete (Loading, Parsing, OID Resolution)
-- **Alert Management**: ✅ Complete (Storage, Correlation, Event Processing)
-- **Webhook Notifications**: ✅ Complete (HTTP Client, Notifier, Retry Logic)
-- **Integration & Main Application**: ✅ Complete (Application orchestration, lifecycle management)
-- **Testing Infrastructure**: ✅ Complete (Unit, Integration, Load Testing)
-- **Documentation**: ✅ Complete (Deployment, API, Troubleshooting)
-- **Build System & Packaging**: ✅ Complete (Makefile, Docker, Release Automation)
+**Goal**: Reduce complexity by consolidating related packages while preserving all SNMP trap processing, webhook delivery, and rule-based alert capabilities.
 
-## Requirements
+**Current State**: 17 internal packages (~5,970 LOC)
+**Target State**: 9 internal packages (~5,500 LOC)
+**Approach**: Phased consolidation with comprehensive testing
 
-- When adding a new features, create a new internal package for it, avoid increasing the number of files in a specific internal package.
-- When building a binary, the following flags should be set:
+## Phase 1: MIB Processing Consolidation
 
-  ```shell
-  go build -ldflags "-X main.version=dev -X main.buildTime=$(date +%Y%m%d%H%M%S) -X main.commitHash=$(git rev-parse --short HEAD)" -o build/nereus ./main.go
-  ```
+### Task 1.1: Create Consolidated MIB Package Structure
 
----
+- [x] Create new `internal/mib` directory structure
+- [x] Design unified MIB interface combining loader, parser, and resolver functionality
+- [x] Create consolidated configuration structure for MIB operations
+- [x] Define new public API for the consolidated package
 
-## 1. Foundation & Configuration ✅
+### Task 1.2: Migrate MIB Loader Functionality
 
-### [x] Configuration System (COMPLETED)
+- [x] Move `internal/loader/loader.go` core functionality to `internal/mib/loader.go`
+- [x] Integrate MIB file loading with hot-reload capabilities
+- [x] Preserve all MIB directory scanning and file validation logic
+- [x] Update configuration handling for MIB directories and file extensions
 
-- [x] CUE schema definition (`cmd/schemas/config.cue`)
-- [x] Integration with `github.com/geekxflood/common/config` package
-- [x] Generate command for sample configuration
-- [x] Validate command with CUE schema validation
-- [x] Configuration loading in root command
-- [x] Support for default configuration paths
+### Task 1.3: Migrate MIB Parser Functionality
 
----
+- [x] Move `internal/mib/parser.go` to new consolidated structure
+- [x] Integrate parser with loader for seamless MIB processing
+- [x] Preserve OID tree building and cross-reference functionality
+- [x] Maintain all MIB parsing statistics and error handling
 
-## 2. SNMP Trap Listener (Priority: HIGH)
+### Task 1.4: Migrate OID Resolver Functionality
 
-### [x] Core UDP Listener Implementation (COMPLETED)
+- [x] Move `internal/resolver/resolver.go` functionality into consolidated MIB package
+- [x] Integrate OID resolution caching with MIB parsing
+- [x] Preserve both forward (OID→name) and reverse (name→OID) resolution
+- [x] Maintain resolver statistics and performance metrics
 
-- [x] Create `internal/listener/listener.go`
-- [x] UDP socket binding and configuration
-- [x] SNMP packet parsing and validation (basic implementation)
-- [x] Community string authentication
-- [x] Concurrent trap handler goroutines
-- [x] Graceful shutdown handling
-- [x] Connection pooling and resource management
-- [x] Integration with main server command
-- [x] Basic unit tests
+### Task 1.5: Update MIB Package Integration
 
-**Dependencies**: Configuration system ✅
+- [x] Update `internal/app/app.go` to use consolidated MIB package
+- [x] Modify initialization order to use single MIB component
+- [x] Update all imports throughout codebase from old packages to new `mib` package
+- [ ] Remove old `internal/loader` and `internal/resolver` directories
 
-### [x] SNMP Protocol Support (COMPLETED - SNMPv2c Only)
+### Task 1.6: Test MIB Consolidation
 
-- [x] SNMP v2c trap parsing (SNMPv1 removed - project is SNMPv2c only)
-- [x] Varbind extraction and processing
-- [x] Error handling for malformed packets
-- [x] Packet validation and security checks
-- [x] ASN.1 BER/DER parsing implementation
-- [x] OID encoding/decoding
-- [x] Comprehensive packet validator
-- [x] Statistics collection and monitoring
+- [x] Migrate and consolidate all MIB-related tests
+- [x] Test MIB loading, parsing, and resolution functionality
+- [x] Verify hot-reload functionality still works correctly
+- [x] Run integration tests to ensure no regression in OID resolution
 
-**Dependencies**: Core UDP Listener ✅
+## Phase 2: Infrastructure Consolidation
 
-### [x] Testing & Validation (COMPLETED)
+### Task 2.1: Create Infrastructure Package Structure
 
-- [x] Unit tests for SNMP packet parsing
-- [x] Integration tests with mock SNMP agents
-- [x] Performance testing under load
-- [x] Error handling validation
-- [x] Memory leak testing
+- [ ] Create new `internal/infra` directory
+- [ ] Design unified interface for HTTP client, retry, and reload functionality
+- [ ] Create consolidated configuration structure for infrastructure components
+- [ ] Define clear separation between different infrastructure concerns
 
-**Dependencies**: SNMP Protocol Support ✅
+### Task 2.2: Migrate HTTP Client Functionality
 
----
+- [ ] Move `internal/client/client.go` to `internal/infra/client.go`
+- [ ] Preserve all webhook request functionality and statistics
+- [ ] Maintain timeout handling and error categorization
+- [ ] Keep all HTTP client configuration options
 
-## 3. MIB Parser & OID Resolution (Priority: HIGH)
+### Task 2.3: Migrate Retry Functionality
 
-### [x] MIB File Loading (COMPLETED)
+- [ ] Move `internal/retry/retry.go` to `internal/infra/retry.go`
+- [ ] Integrate retry logic with HTTP client for webhook delivery
+- [ ] Preserve exponential backoff and circuit breaker functionality
+- [ ] Maintain all retry statistics and configuration options
 
-- [x] Create `internal/loader/loader.go`
-- [x] MIB file discovery and enumeration
-- [x] Recursive directory scanning
-- [x] File format validation (.mib, .txt)
-- [x] Caching mechanism for parsed MIBs
-- [x] Hot reload support for MIB changes
+### Task 2.4: Migrate Reload Functionality
 
-**Dependencies**: Configuration system ✅
+- [ ] Move `internal/reload/reload.go` to `internal/infra/reload.go`
+- [ ] Integrate reload manager with consolidated MIB package
+- [ ] Preserve file system watching and debouncing logic
+- [ ] Maintain component reload registration system
 
-### [x] MIB Parsing Engine (COMPLETED)
+### Task 2.5: Update Infrastructure Integration
 
-- [x] Create `internal/mib/parser.go`
-- [x] ASN.1 MIB syntax parsing
-- [x] OID tree construction
-- [x] Symbol table generation
-- [x] Cross-reference resolution
-- [x] Error handling for invalid MIBs
+- [ ] Update `internal/app/app.go` to use consolidated infrastructure package
+- [ ] Modify `internal/notifier` to use consolidated HTTP client and retry
+- [ ] Update all imports from old packages to new `infra` package
+- [ ] Remove old `internal/client`, `internal/retry`, and `internal/reload` directories
 
-**Dependencies**: MIB File Loading ✅
+### Task 2.6: Test Infrastructure Consolidation
 
-### [x] OID Resolution Service (COMPLETED)
+- [ ] Migrate and consolidate all infrastructure-related tests
+- [ ] Test HTTP client functionality with retry mechanisms
+- [ ] Verify reload functionality works with consolidated MIB package
+- [ ] Run integration tests for webhook delivery and error handling
 
-- [x] Create `internal/resolver/resolver.go`
-- [x] Numeric OID to symbolic name translation
-- [x] Description and type information lookup
-- [x] Reverse lookup (name to OID)
-- [x] Efficient search algorithms
-- [x] Caching for frequently accessed OIDs
+## Phase 3: Validation and Alerts Integration
 
-**Dependencies**: MIB Parsing Engine ✅
+### Task 3.1: Integrate Validation into Listener
 
-### [x] Testing & Validation (COMPLETED)
+- [ ] Move `internal/validator/validator.go` functionality into `internal/listener`
+- [ ] Integrate packet validation directly into trap processing pipeline
+- [ ] Preserve all validation rules and security checks
+- [ ] Maintain validation statistics and error reporting
 
-- [x] Unit tests for MIB parsing
-- [x] Test with standard MIBs (RFC1213, etc.)
-- [x] Performance testing with large MIB sets
-- [x] Memory usage optimization
-- [x] Cache effectiveness validation
+### Task 3.2: Integrate Alerts into Notifier
 
-**Dependencies**: OID Resolution Service
+- [ ] Move `internal/alerts/alerts.go` functionality into `internal/notifier`
+- [ ] Integrate Prometheus alert conversion with notification pipeline
+- [ ] Preserve all alert formatting and label mapping
+- [ ] Maintain alert conversion statistics
 
----
+### Task 3.3: Update Package Integration
 
-## 4. Alert Management & Storage (Priority: MEDIUM)
+- [ ] Update `internal/listener` to handle validation internally
+- [ ] Update `internal/notifier` to handle alert conversion internally
+- [ ] Update all imports throughout codebase
+- [ ] Remove old `internal/validator` and `internal/alerts` directories
 
-### [x] Event Data Structures (COMPLETED)
+### Task 3.4: Test Integration Changes
 
-- [x] Create `internal/events/events.go`
-- [x] Trap event structure definition
-- [x] Alert state management
-- [x] Correlation ID generation
-- [x] Timestamp and metadata handling
-- [x] Serialization support
+- [ ] Test packet validation within listener package
+- [ ] Test alert conversion within notifier package
+- [ ] Verify no regression in validation or alert functionality
+- [ ] Run end-to-end tests for complete SNMP processing pipeline
 
-**Dependencies**: SNMP Trap Listener ✅, MIB Parser ✅
+## Phase 4: Correlator Simplification
 
-### [x] Event Storage (COMPLETED)
+### Task 4.1: Simplify Rule Engine
 
-- [x] Create `internal/storage/storage.go`
-- [x] SQLite database backend for persistent storage
-- [x] Event querying and filtering with SQL
-- [x] Cleanup and retention policies with automated cleanup
-- [x] Thread-safe operations with proper locking
-- [x] Batch processing for performance optimization
+- [ ] Remove complex flapping detection logic from correlator
+- [ ] Remove auto-acknowledgment functionality
+- [ ] Simplify rule evaluation to basic field matching only
+- [ ] Preserve deduplication and severity setting capabilities
 
-**Dependencies**: Event Data Structures ✅
+### Task 4.2: Streamline Correlation Logic
 
-### [x] Alert Correlation Engine (COMPLETED)
+- [ ] Reduce correlation rule complexity to essential operations
+- [ ] Maintain event grouping and correlation window functionality
+- [ ] Preserve correlation statistics for monitoring
+- [ ] Update configuration schema to reflect simplified options
 
-- [x] Create `internal/correlator/correlator.go`
-- [x] Event correlation algorithms with rule-based matching
-- [x] Duplicate detection with configurable time windows
-- [x] Related event grouping by source and trap type
-- [x] Auto-resolution logic with flapping detection
-- [x] Correlation rule engine with flexible conditions and actions
+### Task 4.3: Test Simplified Correlator
 
-**Dependencies**: Event Storage ✅
+- [ ] Update correlator tests to reflect simplified functionality
+- [ ] Test basic deduplication and severity setting
+- [ ] Verify correlation statistics are still accurate
+- [ ] Test integration with event processing pipeline
 
-### [x] Testing & Validation (COMPLETED)
+## Phase 5: Final Integration and Testing
 
-- [x] Unit tests for event management
-- [x] Correlation algorithm testing
-- [x] Performance testing with high event volumes
-- [x] Memory management validation
-- [x] Concurrency testing
+### Task 5.1: Update Application Orchestration
 
-**Dependencies**: Alert Correlation Engine
+- [ ] Update `internal/app/app.go` component initialization for all changes
+- [ ] Verify correct dependency order with consolidated packages
+- [ ] Update health check integration for consolidated components
+- [ ] Test graceful shutdown with new package structure
 
----
+### Task 5.2: Update Configuration Schema
 
-## 5. Webhook Notification System (Priority: MEDIUM)
+- [ ] Update CUE configuration schemas in `cmd/schemas/config.cue`
+- [ ] Ensure backward compatibility with existing configurations
+- [ ] Update configuration examples in `examples/` directory
+- [ ] Test configuration validation with new package structure
 
-### [x] Webhook Client Implementation (COMPLETED)
+### Task 5.3: Update Documentation
 
-- [x] Create `internal/client/client.go`
-- [x] HTTP client with timeout configuration
-- [x] Custom header support
-- [x] SSL/TLS configuration
-- [x] Connection pooling
-- [x] Request/response logging
+- [ ] Update README.md to reflect new package structure
+- [ ] Update development rules in `.augment/rules/development.md`
+- [ ] Update package documentation and GoDoc comments
+- [ ] Update architecture diagrams and component descriptions
 
-**Dependencies**: Configuration system ✅
+### Task 5.4: Comprehensive Testing
 
-### [x] Notification Engine (COMPLETED)
+- [ ] Run full test suite with all consolidated packages
+- [ ] Perform integration testing with real SNMP traps
+- [ ] Test webhook delivery with various notification templates
+- [ ] Verify metrics and monitoring functionality
 
-- [x] Create `internal/notifier/notifier.go`
-- [x] Webhook payload templating with Go templates
-- [x] Multiple endpoint support with individual configurations
-- [x] Filtering and routing logic with rule-based system
-- [x] Batch notification support via worker queues
-- [x] Rate limiting configuration (framework ready)
+### Task 5.5: Performance Validation
 
-**Dependencies**: Webhook Client ✅, Alert Management ✅
+- [ ] Benchmark SNMP trap processing performance
+- [ ] Compare memory usage before and after consolidation
+- [ ] Test high-throughput scenarios with consolidated packages
+- [ ] Verify no performance regression in critical paths
 
-### [x] Retry Logic & Reliability (COMPLETED)
+## Phase 6: Cleanup and Finalization
 
-- [x] Create `internal/retry/retry.go`
-- [x] Exponential backoff implementation with jitter
-- [x] Circuit breaker pattern with configurable thresholds
-- [x] Health check monitoring via circuit breaker states
-- [x] Metrics collection with comprehensive statistics
-- [x] Context-aware cancellation and timeout handling
+### Task 6.1: Code Cleanup
 
-**Dependencies**: Notification Engine ✅
+- [ ] Remove any unused imports or dead code
+- [ ] Ensure consistent error handling across consolidated packages
+- [ ] Verify all logging includes appropriate component context
+- [ ] Update code comments and documentation strings
 
-### [x] Testing & Validation (COMPLETED)
+### Task 6.2: Build and Deployment Testing
 
-- [x] Unit tests for webhook functionality
-- [x] Integration tests with mock endpoints
-- [x] Retry logic validation
-- [x] Performance testing
-- [x] Failure scenario testing
+- [ ] Test build process with new package structure
+- [ ] Verify Docker container builds successfully
+- [ ] Test deployment with existing configuration files
+- [ ] Validate backward compatibility with production configurations
 
-**Dependencies**: Retry Logic & Reliability
+### Task 6.3: Final Validation
 
----
+- [ ] Run complete end-to-end testing scenario
+- [ ] Verify all original functionality is preserved
+- [ ] Test error scenarios and edge cases
+- [ ] Confirm metrics and monitoring data accuracy
 
-## 6. Integration & System Components (Priority: MEDIUM)
+## Success Criteria
 
-### [x] Logging Integration (COMPLETE)
+- [ ] Package count reduced from 17 to 9 (47% reduction)
+- [ ] All core SNMP trap processing functionality preserved
+- [ ] Webhook delivery and notification system fully functional
+- [ ] Configuration backward compatibility maintained
+- [ ] No performance regression in critical paths
+- [ ] All tests passing with >90% coverage
+- [ ] Documentation updated and accurate
 
-- [x] Integrate `github.com/geekxflood/common/logging` package
-- [x] Structured logging throughout codebase
-- [x] Log level configuration
-- [x] Component-specific loggers
-- [x] Performance logging
-- [x] Error tracking and alerting
+## Rollback Plan
 
-**Dependencies**: All major components
+If any phase encounters critical issues:
 
-### [x] Metrics & Monitoring (COMPLETE)
-
-- [x] Create `internal/metrics/metrics.go`
-- [x] Prometheus metrics integration
-- [x] Performance counters
-- [x] Health check endpoints
-- [x] System resource monitoring
-- [x] Alert processing metrics
-
-**Dependencies**: All major components
-
-### [x] Hot Reload Support (COMPLETE)
-
-- [x] Configuration hot reload implementation
-- [x] MIB file hot reload
-- [x] Webhook configuration updates
-- [x] Graceful component restart
-- [x] State preservation during reload
-
-**Dependencies**: Configuration system, MIB Parser
-
----
-
-## 7. Testing Infrastructure (Priority: HIGH) ✅
-
-### [x] Unit Testing Framework (COMPLETED)
-
-- [x] Comprehensive unit test coverage (>90%)
-- [x] Mock implementations for external dependencies
-- [x] Test utilities and helpers
-- [x] Automated test execution
-- [x] Code coverage reporting
-
-**Dependencies**: All components ✅
-
-### [x] Integration Testing (COMPLETED)
-
-- [x] End-to-end testing scenarios
-- [x] Mock SNMP agent for testing
-- [x] Webhook endpoint simulators
-- [x] Configuration validation tests
-- [x] Performance benchmarks
-
-**Dependencies**: Unit Testing Framework ✅
-
-### [x] Load Testing (COMPLETED)
-
-- [x] High-volume trap processing tests
-- [x] Concurrent connection testing
-- [x] Memory usage under load
-- [x] Webhook delivery performance
-- [x] System stability validation
-
-**Dependencies**: Integration Testing ✅
-
----
-
-## 8. Documentation & Examples (Priority: LOW) ✅
-
-### [x] API Documentation (COMPLETED)
-
-- [x] GoDoc comments for all the codebase
-- [x] Configuration reference documentation
-- [x] MIB integration guide
-- [x] Webhook configuration examples
-- [x] Troubleshooting guide
-
-**Dependencies**: All components ✅
-
-### [x] Deployment Documentation (COMPLETED)
-
-- [x] Installation instructions
-- [x] Docker deployment guide
-- [x] Kubernetes manifests
-- [x] Systemd service configuration
-- [x] Security best practices
-
-**Dependencies**: Packaging & Deployment ✅
-
-### [x] Example Configurations (COMPLETED)
-
-- [x] Production-ready configuration examples
-- [x] Common MIB setups
-- [x] Webhook integration examples
-- [x] Monitoring and alerting setups
-- [x] Performance tuning guides
-
-**Dependencies**: All components ✅
-
----
-
-## 9. Packaging & Deployment (Priority: LOW) ✅
-
-### [x] Build System (COMPLETED)
-
-- [x] Makefile with build targets
-- [x] Version injection via ldflags
-- [x] Cross-platform builds
-- [x] Release automation
-- [x] Binary packaging
-
-**Dependencies**: All components ✅
-
-### [x] Container Support (COMPLETED)
-
-- [x] Dockerfile optimization
-- [x] Multi-stage builds
-- [x] Security scanning
-- [x] Image size optimization
-- [x] Container registry publishing
-
-**Dependencies**: Build System ✅
-
----
-
-## 🎉 PROJECT COMPLETION SUMMARY
-
-### ✅ All Major Components Completed
-
-The Nereus SNMP Trap Alerting System is now **FULLY IMPLEMENTED** with all core functionality, comprehensive testing, documentation, and deployment automation in place.
-
-### 📊 Development Statistics
-
-- **Total Components**: 9 major components
-- **Completion Rate**: 100%
-- **Test Coverage**: >90% across all internal packages
-- **Documentation**: Complete with deployment guides, API docs, and troubleshooting
-- **Build System**: Full automation with cross-platform support
-
-### 🚀 Key Achievements
-
-#### Core Functionality
-
-- ✅ **SNMPv2c Trap Processing**: Full packet parsing and validation
-- ✅ **MIB Integration**: Dynamic loading, parsing, and OID resolution
-- ✅ **Event Correlation**: Intelligent grouping and deduplication
-- ✅ **Webhook Notifications**: Reliable delivery with retry logic
-- ✅ **Configuration Management**: CUE-based validation and hot-reload
-- ✅ **Storage System**: SQLite with automatic cleanup and retention
-- ✅ **Metrics & Monitoring**: Prometheus integration with health checks
-
-#### Testing Infrastructure
-
-- ✅ **Unit Tests**: Comprehensive coverage for all internal packages
-- ✅ **Integration Tests**: End-to-end scenarios with mock SNMP agents
-- ✅ **Load Testing**: High-volume performance validation
-- ✅ **Error Handling**: Robust failure scenario testing
-
-#### Documentation & Deployment
-
-- ✅ **API Documentation**: Complete REST API reference
-- ✅ **Deployment Guide**: Docker, Kubernetes, systemd configurations
-- ✅ **Troubleshooting Guide**: Comprehensive problem resolution
-- ✅ **Build System**: Makefile, Docker, GoReleaser automation
-
-### 🛠 Technical Implementation Highlights
-
-#### Architecture
-
-- **Modular Design**: Clean separation of concerns across packages
-- **Dependency Injection**: Testable and maintainable component integration
-- **Concurrent Processing**: Worker pools for high-throughput scenarios
-- **Resource Management**: Proper cleanup and lifecycle management
-
-#### Performance Features
-
-- **Configurable Workers**: Scalable processing based on system resources
-- **Buffered Channels**: Efficient message passing and backpressure handling
-- **Connection Pooling**: Optimized database and HTTP client management
-- **Memory Optimization**: Bounded queues and automatic cleanup
-
-#### Security & Reliability
-
-- **Input Validation**: Comprehensive SNMP packet and configuration validation
-- **Error Recovery**: Graceful handling of failures with retry mechanisms
-- **Resource Limits**: Configurable bounds to prevent resource exhaustion
-- **Secure Defaults**: Production-ready security configurations
-
-### 📁 Project Structure Overview
-
-```txt
-nereus/
-├── cmd/                    # Command-line interface and schemas
-├── internal/               # Core application packages
-│   ├── app/               # Application orchestration
-│   ├── client/            # HTTP client for webhooks
-│   ├── config/            # Configuration management
-│   ├── correlator/        # Event correlation engine
-│   ├── events/            # Event data structures
-│   ├── listener/          # SNMP trap listener
-│   ├── mib/               # MIB parser and manager
-│   ├── notifier/          # Webhook notification system
-│   ├── processor/         # Event processing pipeline
-│   └── storage/           # Database and persistence
-├── test/                  # Testing infrastructure
-│   ├── integration/       # Integration test suite
-│   └── load/              # Load testing framework
-├── docs/                  # Comprehensive documentation
-├── examples/              # Configuration examples
-├── mibs/                  # MIB files
-├── Makefile              # Build automation
-├── Dockerfile            # Container image
-├── docker-compose.yml    # Multi-service deployment
-└── .goreleaser.yml       # Release automation
-```
-
-### 🎯 Ready for Production
-
-The Nereus SNMP Trap Alerting System is now **production-ready** with:
-
-- **Scalable Architecture**: Handles high-volume SNMP trap processing
-- **Reliable Delivery**: Robust webhook notification with retry logic
-- **Comprehensive Monitoring**: Prometheus metrics and health endpoints
-- **Easy Deployment**: Docker, Kubernetes, and package manager support
-- **Extensive Documentation**: Complete guides for deployment and troubleshooting
-- **Automated Testing**: Full test coverage with CI/CD integration support
-
-### 🔄 Next Steps (Optional Enhancements)
-
-While the core system is complete, potential future enhancements could include:
-
-- **SNMPv3 Support**: Extended protocol support for enhanced security
-- **Web UI**: Management interface for configuration and monitoring
-- **Plugin System**: Extensible architecture for custom processors
-- **Clustering**: Multi-node deployment for high availability
-- **Advanced Analytics**: Machine learning for anomaly detection
-
----
-
-**Project Status**: ✅ **COMPLETE**
-**Last Updated**: December 2023
-**Version**: 1.0.0-ready
-
----
+- [ ] Revert changes for that phase only
+- [ ] Restore original package structure for affected components
+- [ ] Run regression tests to ensure system stability
+- [ ] Document issues and alternative approaches
+- [ ] Consider alternative consolidation strategies
 
 ## Notes
 
-- Tasks marked with ✅ are completed
-- Tasks marked with 🔄 are not started
-- Dependencies must be completed before dependent tasks can begin
-- Time estimates are for a single developer working full-time
-- Testing should be done incrementally alongside development
-- Regular code reviews and integration testing recommended throughout development
+- Each task should be completed and tested before proceeding to the next
+- Maintain git commits for each major task for easy rollback
+- Test thoroughly at each phase boundary
+- Keep original packages until consolidation is fully tested and validated
+- Monitor system performance throughout the consolidation process

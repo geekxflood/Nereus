@@ -9,10 +9,15 @@ import (
 
 	"github.com/geekxflood/common/config"
 	"github.com/geekxflood/nereus/internal/correlator"
-	"github.com/geekxflood/nereus/internal/resolver"
+	"github.com/geekxflood/nereus/internal/mib"
 	"github.com/geekxflood/nereus/internal/storage"
 	"github.com/geekxflood/nereus/internal/types"
 )
+
+// OIDResolver defines the interface for OID resolution services
+type OIDResolver interface {
+	ResolveOID(oid string) (*mib.OIDInfo, error)
+}
 
 // ProcessorConfig holds configuration for the event processor
 type ProcessorConfig struct {
@@ -45,7 +50,7 @@ func DefaultProcessorConfig() *ProcessorConfig {
 // EventProcessor processes SNMP trap events through enrichment, correlation, and storage
 type EventProcessor struct {
 	config     *ProcessorConfig
-	resolver   *resolver.Resolver
+	resolver   OIDResolver
 	correlator *correlator.Correlator
 	storage    *storage.Storage
 	eventQueue chan *EventTask
@@ -92,7 +97,7 @@ type ProcessorStats struct {
 }
 
 // NewEventProcessor creates a new event processor
-func NewEventProcessor(cfg config.Provider, resolver *resolver.Resolver, correlator *correlator.Correlator, storage *storage.Storage) (*EventProcessor, error) {
+func NewEventProcessor(cfg config.Provider, resolver OIDResolver, correlator *correlator.Correlator, storage *storage.Storage) (*EventProcessor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("configuration provider cannot be nil")
 	}

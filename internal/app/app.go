@@ -18,12 +18,10 @@ import (
 	"github.com/geekxflood/nereus/internal/correlator"
 	"github.com/geekxflood/nereus/internal/events"
 	"github.com/geekxflood/nereus/internal/listener"
-	"github.com/geekxflood/nereus/internal/loader"
 	"github.com/geekxflood/nereus/internal/metrics"
 	"github.com/geekxflood/nereus/internal/mib"
 	"github.com/geekxflood/nereus/internal/notifier"
 	"github.com/geekxflood/nereus/internal/reload"
-	"github.com/geekxflood/nereus/internal/resolver"
 	"github.com/geekxflood/nereus/internal/storage"
 	"github.com/geekxflood/nereus/internal/types"
 )
@@ -88,9 +86,7 @@ type Application struct {
 	configProvider config.Provider
 
 	// Core components
-	mibLoader      *loader.Loader
-	mibParser      *mib.Parser
-	resolver       *resolver.Resolver
+	mibManager     *mib.Manager
 	listener       ListenerInterface
 	storage        *storage.Storage
 	correlator     *correlator.Correlator
@@ -233,23 +229,13 @@ func (a *Application) Initialize() error {
 		return fmt.Errorf("failed to start reload manager: %w", err)
 	}
 
-	// Initialize MIB loader
-	if err := a.initializeMIBLoader(); err != nil {
-		return fmt.Errorf("failed to initialize MIB loader: %w", err)
+	// Initialize consolidated MIB manager
+	if err := a.initializeMIBManager(); err != nil {
+		return fmt.Errorf("failed to initialize MIB manager: %w", err)
 	}
 
-	// Register MIB loader for hot reload
-	a.reloadManager.RegisterComponent("mib_loader", a.mibLoader)
-
-	// Initialize MIB parser
-	if err := a.initializeMIBParser(); err != nil {
-		return fmt.Errorf("failed to initialize MIB parser: %w", err)
-	}
-
-	// Initialize OID resolver
-	if err := a.initializeResolver(); err != nil {
-		return fmt.Errorf("failed to initialize OID resolver: %w", err)
-	}
+	// TODO: Register MIB manager for hot reload (needs interface implementation)
+	// a.reloadManager.RegisterComponent("mib_manager", a.mibManager)
 
 	// Initialize storage
 	if err := a.initializeStorage(); err != nil {
@@ -414,49 +400,26 @@ func (a *Application) Shutdown() error {
 	return nil
 }
 
-// initializeMIBLoader initializes the MIB loader component
-func (a *Application) initializeMIBLoader() error {
-	a.logger.Info("Initializing MIB loader")
+// initializeMIBManager initializes the consolidated MIB manager component
+func (a *Application) initializeMIBManager() error {
+	a.logger.Info("Initializing consolidated MIB manager")
 
-	loader, err := loader.NewLoader(a.configProvider)
+	manager, err := mib.NewManager(a.configProvider)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create MIB manager: %w", err)
 	}
 
-	// Load all MIB files
-	if err := loader.LoadAll(); err != nil {
-		return fmt.Errorf("failed to load MIB files: %w", err)
+	// Load and parse all MIB files
+	if err := manager.LoadAll(); err != nil {
+		return fmt.Errorf("failed to load and parse MIB files: %w", err)
 	}
 
-	a.mibLoader = loader
-	return nil
-}
-
-// initializeMIBParser initializes the MIB parser component
-func (a *Application) initializeMIBParser() error {
-	a.logger.Info("Initializing MIB parser")
-
-	parser := mib.NewParser(a.mibLoader)
-
-	// Parse all loaded MIB files
-	if err := parser.ParseAll(); err != nil {
-		return fmt.Errorf("failed to parse MIB files: %w", err)
+	// Start hot reload if enabled
+	if err := manager.StartHotReload(); err != nil {
+		return fmt.Errorf("failed to start hot reload: %w", err)
 	}
 
-	a.mibParser = parser
-	return nil
-}
-
-// initializeResolver initializes the OID resolver component
-func (a *Application) initializeResolver() error {
-	a.logger.Info("Initializing OID resolver")
-
-	resolver, err := resolver.NewResolver(a.configProvider, a.mibParser)
-	if err != nil {
-		return err
-	}
-
-	a.resolver = resolver
+	a.mibManager = manager
 	return nil
 }
 
@@ -516,7 +479,7 @@ func (a *Application) initializeNotifier() error {
 func (a *Application) initializeEventProcessor() error {
 	a.logger.Info("Initializing event processor")
 
-	processor, err := events.NewEventProcessor(a.configProvider, a.resolver, a.correlator, a.storage)
+	processor, err := events.NewEventProcessor(a.configProvider, a.mibManager, a.correlator, a.storage)
 	if err != nil {
 		return err
 	}
@@ -748,8 +711,8 @@ func (a *Application) updateStats() {
 		a.stats.ComponentStats["notifier"] = a.notifier.GetStats()
 	}
 
-	if a.resolver != nil {
-		a.stats.ComponentStats["resolver"] = a.resolver.GetStats()
+	if a.mibManager != nil {
+		a.stats.ComponentStats["mib_manager"] = a.mibManager.GetStats()
 	}
 }
 
